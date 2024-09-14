@@ -83,7 +83,7 @@ def main():
 
     mode = 0
 
-    while args.data_collection != 'data_collection':
+    while args.mode != 'data_collection':
         fps = cvFpsCalc.get()
 
         key = cv.waitKey(10)
@@ -110,34 +110,38 @@ def main():
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
                 landmark_list = calc_landmark_list(debug_image, hand_landmarks)
-                hand_landmarks_list.append(landmark_list)
+                hand_landmarks_list.append((landmark_list, handedness.classification[0].label))
                 handedness_list.append(handedness)
 
                 debug_image = draw_bounding_rect(use_brect, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, landmark_list)
 
+
+            hand_landmarks_list.sort(key=lambda x: x[1])
+
             # Combine landmarks of both hands
             if len(hand_landmarks_list) == 1:
                 # Pad single-handed landmarks to match two-handed format
-                hand_landmarks_list[0] = pad_single_hand_landmarks(hand_landmarks_list[0])
-                combined_landmarks = hand_landmarks_list[0]
+                padded_landmarks = pad_single_hand_landmarks(hand_landmarks_list[0][0], hand_landmarks_list[0][1])
+                combined_landmarks = padded_landmarks
             elif len(hand_landmarks_list) == 2:
                 # Combine landmarks of both hands
-                combined_landmarks = hand_landmarks_list[0] + hand_landmarks_list[1]
+                combined_landmarks = hand_landmarks_list[0][0] + hand_landmarks_list[1][0]
             else:
                 combined_landmarks = []
 
             if combined_landmarks:
                 pre_processed_landmark_list = pre_process_landmark(combined_landmarks)
-                logging_csv(number, mode, pre_processed_landmark_list)
-                if args.mode != 'data_collection':
-                    hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-                    debug_image = draw_info_text(
-                        debug_image,
-                        brect,
-                        handedness_list[0],  # Assuming the first hand's handedness for display
-                        keypoint_classifier_labels[hand_sign_id],
-                    )
+                # logging_csv(number, mode, pre_processed_landmark_list)
+                hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+                combined_brect = calc_combined_bounding_rect(hand_landmarks_list)
+                debug_image = draw_combined_bounding_rect(debug_image, combined_brect)
+                debug_image = draw_info_text(
+                    debug_image,
+                    combined_brect,
+                    handedness_list[0],  # Assuming the first hand's handedness for display
+                    keypoint_classifier_labels[hand_sign_id],
+                )
 
         debug_image = draw_info(debug_image, fps, mode, number)
         cv.imshow("Hand Gesture Recognition", debug_image)
