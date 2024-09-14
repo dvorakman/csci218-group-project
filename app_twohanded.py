@@ -47,6 +47,7 @@ def main():
     if args.mode == 'data_collection':
         continuous_data_collection(args)
 
+
     cap_device = args.device
     cap_width = args.width
     cap_height = args.height
@@ -82,7 +83,7 @@ def main():
 
     mode = 0
 
-    while True:
+    while args.data_collection != 'data_collection':
         fps = cvFpsCalc.get()
 
         key = cv.waitKey(10)
@@ -141,6 +142,7 @@ def main():
         debug_image = draw_info(debug_image, fps, mode, number)
         cv.imshow("Hand Gesture Recognition", debug_image)
 
+
     cap.release()
     cv.destroyAllWindows()
 
@@ -195,33 +197,36 @@ def continuous_data_collection(args):
             for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
                 brect = calc_bounding_rect(debug_image, hand_landmarks)
                 landmark_list = calc_landmark_list(debug_image, hand_landmarks)
-                hand_landmarks_list.append(landmark_list)
+                hand_landmarks_list.append((landmark_list, handedness.classification[0].label))
                 handedness_list.append(handedness)
 
                 debug_image = draw_bounding_rect(use_brect, debug_image, brect)
                 debug_image = draw_landmarks(debug_image, landmark_list)
 
+            hand_landmarks_list.sort(key=lambda x: x[1])
+
             # Combine landmarks of both hands
             if len(hand_landmarks_list) == 1:
                 # Pad single-handed landmarks to match two-handed format
-                hand_landmarks_list[0] = pad_single_hand_landmarks(hand_landmarks_list[0])
-                combined_landmarks = hand_landmarks_list[0]
+                padded_landmarks = pad_single_hand_landmarks(hand_landmarks_list[0][0], hand_landmarks_list[0][1])
+                combined_landmarks = padded_landmarks
             elif len(hand_landmarks_list) == 2:
                 # Combine landmarks of both hands
-                combined_landmarks = hand_landmarks_list[0] + hand_landmarks_list[1]
+                combined_landmarks = hand_landmarks_list[0][0] + hand_landmarks_list[1][0]
             else:
                 combined_landmarks = []
 
             if combined_landmarks:
                 pre_processed_landmark_list = pre_process_landmark(combined_landmarks)
                 logging_csv(label_index, 1, pre_processed_landmark_list)
-                if args.mode != 'data_collection':
-                    debug_image = draw_info_text(
-                        debug_image,
-                        brect,
-                        handedness_list[0],  # Assuming the first hand's handedness for display
-                        label_index,
-                    )
+                combined_brect = calc_combined_bounding_rect(hand_landmarks_list)
+                debug_image = draw_combined_bounding_rect(debug_image, combined_brect)
+                debug_image = draw_info_text(
+                    debug_image,
+                    combined_brect,
+                    handedness_list[0],  # Assuming the first hand's handedness for display
+                    label_index,
+                )
             
         debug_image = draw_info(debug_image, fps, 1, label_index)
         cv.imshow('Continuous Data Collection', debug_image)
@@ -229,9 +234,23 @@ def continuous_data_collection(args):
         if cv.waitKey(1) & 0xFF == ord('q'):
             break
 
-def pad_single_hand_landmarks(landmark_list):
+def draw_combined_bounding_rect(image, brect):
+    cv.rectangle(image, (int(brect[0]), int(brect[1])), (int(brect[2]), int(brect[3])), (0, 255, 0), 2)
+    return image
+
+def pad_single_hand_landmarks(landmark_list, handedness):
+    print(handedness)
     # Assuming each hand has 21 joints, pad to 42 joints
-    return landmark_list + [[0, 0]] * 21
+    if handedness == 'Left':
+        # Pad the right side
+        print(landmark_list + [[0, 0]] * 21)
+        return landmark_list + [[0, 0]] * 21
+    elif handedness == 'Right':
+        # Pad the left side
+        print([[0, 0]] * 21 + landmark_list)
+        return [[0, 0]] * 21 + landmark_list
+    else:
+        raise ValueError("Handedness must be 'Left' or 'Right'")
 
 def select_mode(key, mode):
     number = -1
@@ -262,6 +281,25 @@ def calc_bounding_rect(image, landmarks):
 
     return [x, y, x + w, y + h]
 
+def calc_combined_bounding_rect(hand_landmarks_list):
+    x_min = float('inf')
+    y_min = float('inf')
+    x_max = float('-inf')
+    y_max = float('-inf')
+
+    for landmarks, _ in hand_landmarks_list:
+        for x, y in landmarks:
+            if x < x_min:
+                x_min = x
+            if y < y_min:
+                y_min = y
+            if x > x_max:
+                x_max = x
+            if y > y_max:
+                y_max = y
+
+    return [x_min, y_min, x_max, y_max]
+
 def calc_landmark_list(image, landmarks):
     image_width, image_height = image.shape[1], image.shape[0]
 
@@ -278,11 +316,17 @@ def calc_landmark_list(image, landmarks):
 
 def pre_process_landmark(landmark_list):
     temp_landmark_list = copy.deepcopy(landmark_list)
+    print("before ", temp_landmark_list, end="\n\n\n")   
+
 
     base_x, base_y = 0, 0
     for index, landmark_point in enumerate(temp_landmark_list):
+        print("landmark_point", landmark_point)
         if index == 0:
             base_x, base_y = landmark_point[0], landmark_point[1]
+
+        if landmark_point[0] == 0 and landmark_point[1] == 0:
+            continue
 
         temp_landmark_list[index][0] = temp_landmark_list[index][0] - base_x
         temp_landmark_list[index][1] = temp_landmark_list[index][1] - base_y
@@ -290,6 +334,8 @@ def pre_process_landmark(landmark_list):
     temp_landmark_list = list(itertools.chain.from_iterable(temp_landmark_list))
 
     max_value = max(list(map(abs, temp_landmark_list)))
+    print("after ", temp_landmark_list, end="\n\n\n")
+
 
     def normalize_(n):
         return n / max_value
@@ -597,30 +643,19 @@ def draw_info_text(image, brect, handedness, hand_sign_text, finger_gesture_text
 
     info_text = handedness.classification[0].label[0:]
     if hand_sign_text != "":
-        info_text = info_text + ":" + hand_sign_text
+        info_text = str(info_text) + ":" + str(hand_sign_text)
     cv.putText(
         image,
         info_text,
         (brect[0] + 5, brect[1] - 4),
         cv.FONT_HERSHEY_SIMPLEX,
         0.6,
-        (255, 255, 255),
+        (0, 255, 0),
         1,
         cv.LINE_AA,
     )
 
     return image
-
-
-def draw_point_history(image, point_history):
-    for index, point in enumerate(point_history):
-        if point[0] != 0 and point[1] != 0:
-            cv.circle(
-                image, (point[0], point[1]), 1 + int(index / 2), (152, 251, 152), 2
-            )
-
-    return image
-
 
 def draw_info(image, fps, mode, number):
     cv.putText(
