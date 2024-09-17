@@ -287,6 +287,38 @@ def bounding_rect(points):
 
     return [x_min, y_min, x_max, y_max]
 
+### testing
+
+def combine_landmarks(hand_landmarks_list, threshold=150):
+    def calculate_distance(point1, point2):
+        return np.linalg.norm(np.array(point1) - np.array(point2))
+    
+    def are_hands_close(hand1, hand2, threshold):
+        for point1 in hand1:
+            for point2 in hand2:
+                if calculate_distance(point1, point2) < threshold:
+                    return True
+        return False
+
+    while len(hand_landmarks_list) > 1:
+        combined = False
+        for i in range(len(hand_landmarks_list)):
+            for j in range(i + 1, len(hand_landmarks_list)):
+                if are_hands_close(hand_landmarks_list[i][0], hand_landmarks_list[j][0], threshold):
+                    combined_landmarks = hand_landmarks_list[i][0] + hand_landmarks_list[j][0]
+                    hand_landmarks_list = [
+                        hand for k, hand in enumerate(hand_landmarks_list) if k != i and k != j
+                    ]
+                    hand_landmarks_list.append((combined_landmarks, "Both"))
+                    combined = True
+                    break
+            if combined:
+                break
+        if not combined:
+            break
+    
+    return [pad_single_hand_landmarks(hand[0], hand[1]) for hand in hand_landmarks_list]
+
 def main():
     args = get_args()
     cap = setup_capture(args)
