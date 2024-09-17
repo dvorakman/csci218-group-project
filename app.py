@@ -14,8 +14,8 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--width", type=int, default=1280)
-    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--width", type=int, default=1920)
+    parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--use_static_image_mode", action="store_true")
     parser.add_argument("--min_detection_confidence", type=float, default=0.7)
     parser.add_argument("--min_tracking_confidence", type=float, default=0.5)
@@ -351,8 +351,11 @@ def main():
                     logging_csv(args.label_index, pre_processed_landmark_list)
 
                 else:
-                    hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-                    debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
+                    try:
+                        hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+                        debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
+                    except ValueError:
+                        print("May be a tensor dimension mismatch :O -idk how to fix this easily and cbf")
 
         debug_image = draw_info(debug_image, fps)
         cv.imshow("Hand Gesture Recognition", debug_image)
