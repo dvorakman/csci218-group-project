@@ -14,8 +14,8 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--width", type=int, default=960)
-    parser.add_argument("--height", type=int, default=540)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--use_static_image_mode", action="store_true")
     parser.add_argument("--min_detection_confidence", type=float, default=0.7)
     parser.add_argument("--min_tracking_confidence", type=float, default=0.5)
@@ -63,13 +63,16 @@ def process_image(cap, hands):
 
 def pad_single_hand_landmarks(landmark_list, handedness):
     if handedness == 'Left':
-        return landmark_list + [[0, 0]] * 21
-    
+        return landmark_list + [[0, 0]] * 21, handedness
+
     elif handedness == 'Right':
-        return [[0, 0]] * 21 + landmark_list
+        return [[0, 0]] * 21 + landmark_list, handedness
     
+    elif handedness == 'Both':
+        return landmark_list, handedness
+
     else:
-        raise ValueError("Handedness must be 'Left' or 'Right'")
+        raise ValueError("Handedness must be 'Left' or 'Right' or 'Both'")
 
 def calc_bounding_rect(image, landmarks):
     image_width, image_height = image.shape[1], image.shape[0]
@@ -165,25 +168,16 @@ def draw_landmarks(image, landmark_point):
 
     return image
 
-def handle_landmarks(debug_image, results, use_brect):
+def handle_landmarks(debug_image, results):
     hand_landmarks_list = []
     handedness_list = []
     for hand_landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
-        brect = calc_bounding_rect(debug_image, hand_landmarks)
         landmark_list = calc_landmark_list(debug_image, hand_landmarks)
         hand_landmarks_list.append((landmark_list, handedness.classification[0].label))
         handedness_list.append(handedness)
-        debug_image = draw_bounding_rect(use_brect, debug_image, brect)
         debug_image = draw_landmarks(debug_image, landmark_list)
     hand_landmarks_list.sort(key=lambda x: x[1])
     return hand_landmarks_list, handedness_list, debug_image
-
-def combine_landmarks(hand_landmarks_list):
-    if len(hand_landmarks_list) == 1:
-        return pad_single_hand_landmarks(hand_landmarks_list[0][0], hand_landmarks_list[0][1])
-    elif len(hand_landmarks_list) == 2:
-        return hand_landmarks_list[0][0] + hand_landmarks_list[1][0]
-    return []
 
 def pre_process_landmark(landmark_list):
     base_y = landmark_list[0][1]
@@ -207,14 +201,14 @@ def calc_combined_bounding_rect(hand_landmarks_list):
             x_max, y_max = max(x_max, x), max(y_max, y)
     return x_min, y_min, x_max, y_max
 
-def draw_combined_bounding_rect(image, brect):
+def draw_bounding_rect(image, brect):
     cv.rectangle(image, (int(brect[0]), int(brect[1])), (int(brect[2]), int(brect[3])), (0, 255, 0), 2)
     return image
 
 def draw_info_text(image, brect, handedness, hand_sign_text):
     cv.rectangle(image, (brect[0], brect[1]), (brect[2], brect[1] - 22), (0, 0, 0), -1)
 
-    info_text = handedness.classification[0].label
+    info_text = str(handedness)
     if hand_sign_text:
         info_text += f": {hand_sign_text}"
 
@@ -255,6 +249,61 @@ def draw_info(image, fps):
 
     return image
 
+def calc_bounding_rect(image, landmarks):
+    image_width, image_height = image.shape[1], image.shape[0]
+
+    landmark_array = np.empty((0, 2), int)
+
+    for _, landmark in enumerate(landmarks.landmark):
+        landmark_x = min(int(landmark.x * image_width), image_width - 1)
+        landmark_y = min(int(landmark.y * image_height), image_height - 1)
+
+        landmark_point = [np.array((landmark_x, landmark_y))]
+
+        landmark_array = np.append(landmark_array, landmark_point, axis=0)
+
+    x, y, w, h = cv.boundingRect(landmark_array)
+
+    return [x, y, x + w, y + h]
+
+def combine_landmarks(hand_landmarks_list, threshold=250):
+    def calculate_center(landmarks):
+        return np.mean(landmarks, axis=0).astype(int)
+
+    def calculate_distance(center1, center2):
+        return np.linalg.norm(center1 - center2)
+
+    while len(hand_landmarks_list) > 1:
+        centers = [calculate_center(hand[0]) for hand in hand_landmarks_list]
+        distances = [
+            (calculate_distance(centers[i], centers[j]), i, j)
+            for i in range(len(centers)) for j in range(i + 1, len(centers))
+        ]
+        distances.sort()
+
+        if distances[0][0] < threshold:
+            _, i, j = distances[0]
+            combined_landmarks = hand_landmarks_list[i][0] + hand_landmarks_list[j][0]
+            hand_landmarks_list = [
+                hand for k, hand in enumerate(hand_landmarks_list) if k != i and k != j
+            ]
+            hand_landmarks_list.append((combined_landmarks, "Both"))
+        else:
+            break
+    
+    return [pad_single_hand_landmarks(hand[0], hand[1]) for hand in hand_landmarks_list]
+
+def bounding_rect(points):
+    x_coordinates = [point[0] for point in points if point != [0, 0]]
+    y_coordinates = [point[1] for point in points if point != [0, 0]]
+
+    x_min = min(x_coordinates)
+    y_min = min(y_coordinates)
+    x_max = max(x_coordinates)
+    y_max = max(y_coordinates)
+
+    return [x_min, y_min, x_max, y_max]
+
 def main():
     args = get_args()
     cap = setup_capture(args)
@@ -275,17 +324,20 @@ def main():
             break
 
         if results.multi_hand_landmarks:
-            hand_landmarks_list, handedness_list, debug_image = handle_landmarks(debug_image, results, True)
-            combined_landmarks = combine_landmarks(hand_landmarks_list)
-            if combined_landmarks:
-                pre_processed_landmark_list = pre_process_landmark(combined_landmarks)
+            hand_landmarks_list, handedness_list, debug_image = handle_landmarks(debug_image, results)
+            hand_list = combine_landmarks(hand_landmarks_list)
+
+            for hand in hand_list:
+                brect = bounding_rect(hand[0])
+
+                debug_image = draw_bounding_rect(debug_image, brect)
+                pre_processed_landmark_list = pre_process_landmark(hand[0])
                 if args.mode == 'data_collection':
                     logging_csv(args.label_index, pre_processed_landmark_list)
+
                 else:
                     hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-                    combined_brect = calc_combined_bounding_rect(hand_landmarks_list)
-                    debug_image = draw_combined_bounding_rect(debug_image, combined_brect)
-                    debug_image = draw_info_text(debug_image, combined_brect, handedness_list[0], keypoint_classifier_labels[hand_sign_id])
+                    debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
 
         debug_image = draw_info(debug_image, fps)
         cv.imshow("Hand Gesture Recognition", debug_image)
