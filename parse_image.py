@@ -32,6 +32,7 @@ def get_args():
     )
     parser.add_argument('--mode', type=str, choices=['data_collection', 'recognition'], default='recognition')
     parser.add_argument('--label_index', type=int, help='Label index for continuous data collection', default=None)
+    parser.add_argument('--static_image_path', type=str, help='Path to the static image for landmark detection', default=None)
 
 
 
@@ -42,6 +43,10 @@ def get_args():
 
 def main():
     args = get_args()
+
+    if args.static_image_path:
+        process_static_image(args.static_image_path, args.min_detection_confidence)
+        return
 
     if args.mode == 'data_collection':
         continuous_data_collection(args)
@@ -743,6 +748,19 @@ def collect_data(args):
 
     cap.release()
     cv.destroyAllWindows()
+
+def process_static_image(image_path, min_detection_confidence):
+    mp_hands = mp.solutions.hands
+    hands = mp_hands.Hands(static_image_mode=True, min_detection_confidence=min_detection_confidence)
+    image = cv.imread(image_path)
+    image_rgb = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+    results = hands.process(image_rgb)
+    if results.multi_hand_landmarks:
+        for hand_landmarks in results.multi_hand_landmarks:
+            print(hand_landmarks)
+    else:
+        print("No hand landmarks detected.")
+    hands.close()
 
 if __name__ == "__main__":
     main()
