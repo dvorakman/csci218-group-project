@@ -8,6 +8,8 @@ import numpy as np
 from model import KeyPointClassifier
 from utils.cvfpscalc import CvFpsCalc
 
+import asyncio
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
@@ -57,6 +59,18 @@ def process_image(cap, hands):
     image.flags.writeable = False
     results = hands.process(image)
     image.flags.writeable = True
+    return debug_image, results
+
+### testing
+async def process_image(cap, hands):
+    ret, image = cap.read()
+    if not ret:
+        return None, None
+    image = cv.flip(image, 1)
+    debug_image = image.copy()
+    image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
+    image.flags.writeable = False
+    results = hands.process(image)
     return debug_image, results
 
 def pad_single_hand_landmarks(landmark_list, handedness):
@@ -361,5 +375,52 @@ def main():
     cap.release()
     cv.destroyAllWindows()
 
+### testing
+async def main():
+    args = get_args()
+    cap = setup_capture(args)
+    hands = setup_hands(args)
+    cvFpsCalc = CvFpsCalc(buffer_len=10)
+    keypoint_classifier = KeyPointClassifier() if args.mode != 'data_collection' else None
+    keypoint_classifier_labels = load_labels("model/keypoint_classifier/keypoint_testing_label.csv")
+
+    while True:
+        fps = cvFpsCalc.get()
+        key = cv.waitKey(1)
+
+        if key == 27:
+            break
+
+        debug_image, results = await process_image(cap, hands)
+        if debug_image is None:
+            break
+
+        if results.multi_hand_landmarks:
+            hand_landmarks_list, handedness_list, debug_image = handle_landmarks(debug_image, results)
+            hand_list = combine_landmarks(hand_landmarks_list)
+
+            for hand in hand_list:
+                brect = bounding_rect(hand[0])
+
+                debug_image = draw_bounding_rect(debug_image, brect)
+                pre_processed_landmark_list = pre_process_landmark(hand[0])
+                if args.mode == 'data_collection':
+                    logging_csv(args.label_index, pre_processed_landmark_list)
+
+                else:
+                    try:
+                        hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
+                        debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
+                    except ValueError:
+                        print("May be a tensor dimension mismatch :O -idk how to fix this easily and cbf")
+
+        debug_image = draw_info(debug_image, fps)
+        cv.imshow("Hand Gesture Recognition", debug_image)
+
+    cap.release()
+    cv.destroyAllWindows()
+
 if __name__ == "__main__":
-    main()
+    # main()
+
+    asyncio.run(main())
