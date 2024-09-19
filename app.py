@@ -9,6 +9,7 @@ from model import KeyPointClassifier
 from utils.cvfpscalc import CvFpsCalc
 
 import asyncio
+from scipy.spatial import KDTree
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -49,19 +50,6 @@ def load_labels(filepath):
     with open(filepath, encoding="utf-8-sig") as f:
         return [row[0] for row in csv.reader(f)]
 
-def process_image(cap, hands):
-    ret, image = cap.read()
-    if not ret:
-        return None, None
-    image = cv.flip(image, 1)
-    debug_image = copy.deepcopy(image)
-    image = cv.cvtColor(image, cv.COLOR_BGR2RGB)
-    image.flags.writeable = False
-    results = hands.process(image)
-    image.flags.writeable = True
-    return debug_image, results
-
-### testing
 async def process_image(cap, hands):
     ret, image = cap.read()
     if not ret:
@@ -101,7 +89,6 @@ def calc_landmark_list(image, landmarks):
 
 def draw_bounding_rect(use_brect, image, brect):
     if use_brect:
-        # Outer rectangle
         cv.rectangle(image, (brect[0], brect[1]), (brect[2], brect[3]), (0, 0, 0), 1)
 
     return image
@@ -261,33 +248,6 @@ def calc_bounding_rect(image, landmarks):
 
     return [x, y, x + w, y + h]
 
-def combine_landmarks(hand_landmarks_list, threshold=250):
-    def calculate_center(landmarks):
-        return np.mean(landmarks, axis=0).astype(int)
-
-    def calculate_distance(center1, center2):
-        return np.linalg.norm(center1 - center2)
-
-    while len(hand_landmarks_list) > 1:
-        centers = [calculate_center(hand[0]) for hand in hand_landmarks_list]
-        distances = [
-            (calculate_distance(centers[i], centers[j]), i, j)
-            for i in range(len(centers)) for j in range(i + 1, len(centers))
-        ]
-        distances.sort()
-
-        if distances[0][0] < threshold:
-            _, i, j = distances[0]
-            combined_landmarks = hand_landmarks_list[i][0] + hand_landmarks_list[j][0]
-            hand_landmarks_list = [
-                hand for k, hand in enumerate(hand_landmarks_list) if k != i and k != j
-            ]
-            hand_landmarks_list.append((combined_landmarks, "Both"))
-        else:
-            break
-    
-    return [pad_single_hand_landmarks(hand[0], hand[1]) for hand in hand_landmarks_list]
-
 def bounding_rect(points):
     x_coordinates = [point[0] for point in points if point != [0, 0]]
     y_coordinates = [point[1] for point in points if point != [0, 0]]
@@ -299,17 +259,16 @@ def bounding_rect(points):
 
     return [x_min, y_min, x_max, y_max]
 
-### testing
-
-def combine_landmarks(hand_landmarks_list, threshold=150):
-    def calculate_distance(point1, point2):
-        return np.linalg.norm(np.array(point1) - np.array(point2))
-    
+def combine_landmarks(hand_landmarks_list, threshold=75):
     def are_hands_close(hand1, hand2, threshold):
-        for point1 in hand1:
-            for point2 in hand2:
-                if calculate_distance(point1, point2) < threshold:
-                    return True
+        tree1 = KDTree(hand1)
+        tree2 = KDTree(hand2)
+        for point in hand1:
+            if tree2.query_ball_point(point, threshold):
+                return True
+        for point in hand2:
+            if tree1.query_ball_point(point, threshold):
+                return True
         return False
 
     while len(hand_landmarks_list) > 1:
@@ -331,51 +290,6 @@ def combine_landmarks(hand_landmarks_list, threshold=150):
     
     return [pad_single_hand_landmarks(hand[0], hand[1]) for hand in hand_landmarks_list]
 
-def main():
-    args = get_args()
-    cap = setup_capture(args)
-    hands = setup_hands(args)
-    cvFpsCalc = CvFpsCalc(buffer_len=10)
-    keypoint_classifier = KeyPointClassifier() if args.mode != 'data_collection' else None
-    keypoint_classifier_labels = load_labels("model/keypoint_classifier/keypoint_testing_label.csv")
-
-    while True:
-        fps = cvFpsCalc.get()
-        key = cv.waitKey(1)
-
-        if key == 27:
-            break
-
-        debug_image, results = process_image(cap, hands)
-        if debug_image is None:
-            break
-
-        if results.multi_hand_landmarks:
-            hand_landmarks_list, handedness_list, debug_image = handle_landmarks(debug_image, results)
-            hand_list = combine_landmarks(hand_landmarks_list)
-
-            for hand in hand_list:
-                brect = bounding_rect(hand[0])
-
-                debug_image = draw_bounding_rect(debug_image, brect)
-                pre_processed_landmark_list = pre_process_landmark(hand[0])
-                if args.mode == 'data_collection':
-                    logging_csv(args.label_index, pre_processed_landmark_list)
-
-                else:
-                    try:
-                        hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
-                        debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
-                    except ValueError:
-                        print("May be a tensor dimension mismatch :O -idk how to fix this easily and cbf")
-
-        debug_image = draw_info(debug_image, fps)
-        cv.imshow("Hand Gesture Recognition", debug_image)
-
-    cap.release()
-    cv.destroyAllWindows()
-
-### testing
 async def main():
     args = get_args()
     cap = setup_capture(args)
@@ -411,8 +325,8 @@ async def main():
                     try:
                         hand_sign_id = keypoint_classifier(pre_processed_landmark_list)
                         debug_image = draw_info_text(debug_image, brect, hand[1], keypoint_classifier_labels[hand_sign_id])
-                    except ValueError:
-                        print("May be a tensor dimension mismatch :O -idk how to fix this easily and cbf")
+                    except ValueError as e:
+                        print(f"dev note - idk how to fix this easily and cbf. \n\tOriginal Message: '{e}'")
 
         debug_image = draw_info(debug_image, fps)
         cv.imshow("Hand Gesture Recognition", debug_image)
@@ -421,6 +335,4 @@ async def main():
     cv.destroyAllWindows()
 
 if __name__ == "__main__":
-    # main()
-
     asyncio.run(main())
