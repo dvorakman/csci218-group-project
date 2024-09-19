@@ -17,11 +17,11 @@ from scipy.spatial import KDTree
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
-    parser.add_argument("--width", type=int, default=1920)
-    parser.add_argument("--height", type=int, default=1080)
+    parser.add_argument("--width", type=int, default=1000)
+    parser.add_argument("--height", type=int, default=1000)
     parser.add_argument("--use_static_image_mode", action="store_true")
-    parser.add_argument("--min_detection_confidence", type=float, default=0.90)
-    parser.add_argument("--min_tracking_confidence", type=float, default=0.90)
+    parser.add_argument("--min_detection_confidence", type=float, default=0.74)
+    parser.add_argument("--min_tracking_confidence", type=float, default=0.75)
 
     parser.add_argument('--mode', type=str, choices=['data_collection', 'recognition'], default='recognition')
     parser.add_argument('--label_index', type=int, default=None)
@@ -43,7 +43,7 @@ def setup_hands(args):
     mp_hands = mp.solutions.hands
     return mp_hands.Hands(
         static_image_mode=args.use_static_image_mode,
-        max_num_hands=2,
+        max_num_hands=1,
         model_complexity=1,
         min_detection_confidence=args.min_detection_confidence,
         min_tracking_confidence=args.min_tracking_confidence,
@@ -548,9 +548,12 @@ async def main():
                                 label = keypoint_classifier_labels[most_common_fg_id]
                                 if most_common_fg_id == SPACE_GESTURE_ID:
                                     sentence_buffer.append("_")
-                                elif most_common_fg_id == DELETE_GESTURE_ID and sentence_buffer:
-                                    sentence_buffer.pop()
-                                elif label != 'Unknown':
+                                elif most_common_fg_id == DELETE_GESTURE_ID:
+                                    try: sentence_buffer.pop()
+                                    except IndexError: pass
+                                elif most_common_fg_id == CLEAR_GESTURE_ID:
+                                    sentence_buffer.clear()
+                                else:
                                     sentence_buffer.append(label)
                                 last_appended_gesture = most_common_fg_id
                                 last_append_time = current_time
