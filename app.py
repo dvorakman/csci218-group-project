@@ -8,9 +8,6 @@ import numpy as np
 from model import KeyPointClassifier
 from utils.cvfpscalc import CvFpsCalc
 
-import os
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--device", type=int, default=0)
@@ -41,6 +38,7 @@ def setup_hands(args):
     return mp_hands.Hands(
         static_image_mode=args.use_static_image_mode,
         max_num_hands=2,
+        model_complexity=1,
         min_detection_confidence=args.min_detection_confidence,
         min_tracking_confidence=args.min_tracking_confidence,
     )
