@@ -25,7 +25,7 @@ landmarks = landmark_data[:, :num_landmarks]
 distances = landmark_data[:, num_landmarks:num_landmarks + 12]
 angles = landmark_data[:, num_landmarks + 12:]
 
-# Define connections between landmarks (example connections)
+# Define connections between landmarks
 connections = [
     (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
     (0, 5), (5, 6), (6, 7), (7, 8),  # Index finger
