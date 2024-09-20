@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import csv
 import math
+from collections import deque
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -33,6 +34,9 @@ def calculate_angle(point1, point2, point3):
     angle = np.arccos(cosine_angle)
     return np.degrees(angle)
 
+def moving_average(data, window_size):
+    return np.mean(list(data)[-window_size:], axis=0)
+
 def main():
     args = get_args()
     cap = cv2.VideoCapture(args.device)
@@ -40,6 +44,12 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
 
     mp_hands = mp.solutions.hands
+
+    # Buffer to store previous frames for smoothing
+    buffer_size = 5
+    landmark_buffer = deque(maxlen=buffer_size)
+    distance_buffer = deque(maxlen=buffer_size)
+    angle_buffer = deque(maxlen=buffer_size)
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -60,8 +70,10 @@ def main():
             if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
                 for hand_landmarks, hand_world_landmarks in zip(results.multi_hand_landmarks, results.multi_hand_world_landmarks):
                     feature_list = []
+                    landmarks = []
                     for landmark in hand_landmarks.landmark:
-                        feature_list.extend([landmark.x, landmark.y, landmark.z])
+                        landmarks.extend([landmark.x, landmark.y, landmark.z])
+                    landmark_buffer.append(landmarks)
                     
                     # Calculate distances between key points
                     distances = [
@@ -78,7 +90,7 @@ def main():
                         calculate_distance(hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
                         calculate_distance(hand_landmarks.landmark[13], hand_landmarks.landmark[17])
                     ]
-                    feature_list.extend(distances)
+                    distance_buffer.append(distances)
                     
                     # Calculate angles between joints
                     angles = [
@@ -96,9 +108,19 @@ def main():
                         calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
                         calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13], hand_landmarks.landmark[17])
                     ]
-                    feature_list.extend(angles)
+                    angle_buffer.append(angles)
                     
-                    logging_csv(args.label_index, feature_list)
+                    # Apply moving average to smooth the data
+                    if len(landmark_buffer) == buffer_size:
+                        smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
+                        smoothed_distances = moving_average(distance_buffer, buffer_size)
+                        smoothed_angles = moving_average(angle_buffer, buffer_size)
+                        
+                        feature_list.extend(smoothed_landmarks)
+                        feature_list.extend(smoothed_distances)
+                        feature_list.extend(smoothed_angles)
+                        
+                        logging_csv(args.label_index, feature_list)
 
                     for landmark, world_landmark in zip(hand_landmarks.landmark, hand_world_landmarks.landmark):
                         z_normalized = int(np.interp(world_landmark.z, [-0.1, 0.1], [255, 0]))
