@@ -25,6 +25,15 @@ landmarks = landmark_data[:, :num_landmarks]
 distances = landmark_data[:, num_landmarks:num_landmarks + 12]
 angles = landmark_data[:, num_landmarks + 12:]
 
+# Define connections between landmarks (example connections)
+connections = [
+    (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
+    (0, 5), (5, 6), (6, 7), (7, 8),  # Index finger
+    (0, 9), (9, 10), (10, 11), (11, 12),  # Middle finger
+    (0, 13), (13, 14), (14, 15), (15, 16),  # Ring finger
+    (0, 17), (17, 18), (18, 19), (19, 20)  # Pinky
+]
+
 def update(frame):
     ax1.cla()  # Clear the previous frame
     ax2.cla()
@@ -49,6 +58,11 @@ def update(frame):
     ax1.set_title(f'Landmarks - Frame {frame} - Label {frame_labels[frame]}', color='white')
     ax1.tick_params(colors='white')
     
+    # Draw lines between the landmarks
+    for connection in connections:
+        start, end = connection
+        ax1.plot([x[start], x[end]], [y[start], y[end]], [z[start], z[end]], 'white')
+    
     # Plot the distances
     distance_frame = distances[frame]
     ax2.plot(distance_frame, 'wo-')
@@ -66,7 +80,7 @@ def update(frame):
     ax3.tick_params(colors='white')
 
 # Create the figure and subplots
-fig = plt.figure(figsize=(15, 5))
+fig = plt.figure(figsize=(20, 5))
 ax1 = fig.add_subplot(131, projection='3d')
 ax2 = fig.add_subplot(132)
 ax3 = fig.add_subplot(133)
