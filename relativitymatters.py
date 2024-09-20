@@ -5,6 +5,25 @@ import argparse
 import csv
 import math
 from collections import deque
+import os
+import threading
+import queue
+from pynput import keyboard
+
+# Create a queue for logging tasks
+log_queue = queue.Queue()
+
+def logging_worker():
+    while True:
+        feature_list, label, dynamic = log_queue.get()
+        if feature_list is None:
+            break
+        logging_csv(feature_list, label, dynamic)
+        log_queue.task_done()
+
+# Start the logging thread
+log_thread = threading.Thread(target=logging_worker)
+log_thread.start()
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -12,15 +31,22 @@ def get_args():
     parser.add_argument("--width", type=int, default=1920)
     parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--label", type=str, required=True, help='Label for the data')
+    parser.add_argument("--dynamic", action='store_true', help='Dynamic gesture detection')
     args = parser.parse_args()
     args.label = args.label.capitalize()
     return args
 
-def logging_csv(label, feature_list):
-    csv_path = "hand_landmarks.csv"
-    with open(csv_path, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow([label] + feature_list)
+def logging_csv(sequence, label, dynamic):
+    folder = 'dynamic' if dynamic else 'static'
+    csv_path = f"data/{folder}/{label}.csv"
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    with open(csv_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        if dynamic:
+            flattened_sequence = [item for sublist in sequence for item in sublist]
+            writer.writerow(flattened_sequence)
+        else:
+            writer.writerow(sequence)
 
 def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2 + (point1.z - point2.z) ** 2)
@@ -51,6 +77,29 @@ def main():
     landmark_buffer = deque(maxlen=buffer_size)
     distance_buffer = deque(maxlen=buffer_size)
     angle_buffer = deque(maxlen=buffer_size)
+
+    # Buffer to store sequences for dynamic gesture detection
+    sequence_length = 30
+    sequence_buffer = deque(maxlen=sequence_length)
+
+    collecting_data = False
+
+    def on_press(key):
+        nonlocal collecting_data
+        if key == keyboard.Key.space:
+            collecting_data = True
+
+    def on_release(key):
+        nonlocal collecting_data
+        if key == keyboard.Key.space:
+            collecting_data = False
+            if args.dynamic and len(sequence_buffer) > 0:
+                log_queue.put((list(sequence_buffer), args.label, args.dynamic))
+                sequence_buffer.clear()
+
+    if args.dynamic:
+        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -92,7 +141,7 @@ def main():
                         calculate_distance(hand_landmarks.landmark[13], hand_landmarks.landmark[17])
                     ]
                     distance_buffer.append(distances)
-                    
+
                     # Calculate angles between joints
                     angles = [
                         calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2], hand_landmarks.landmark[3]),
@@ -110,7 +159,7 @@ def main():
                         calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13], hand_landmarks.landmark[17])
                     ]
                     angle_buffer.append(angles)
-                    
+
                     # Apply moving average to smooth the data
                     if len(landmark_buffer) == buffer_size:
                         smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
@@ -121,7 +170,11 @@ def main():
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
                         
-                        logging_csv(args.label, feature_list)
+                        if collecting_data or not args.dynamic:
+                            if args.dynamic:
+                                sequence_buffer.append(feature_list)
+                            else:
+                                log_queue.put((feature_list, args.label, args.dynamic))
 
                     for landmark, world_landmark in zip(hand_landmarks.landmark, hand_world_landmarks.landmark):
                         z_normalized = int(np.interp(world_landmark.z, [-0.1, 0.1], [255, 0]))
@@ -133,6 +186,8 @@ def main():
             if cv2.waitKey(5) & 0xFF == 27:
                 break
     cap.release()
+    log_queue.put((None, None, None))
+    log_thread.join()
 
 if __name__ == "__main__":
     main()
