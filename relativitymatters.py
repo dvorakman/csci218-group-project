@@ -64,6 +64,12 @@ def calculate_angle(point1, point2, point3):
 def moving_average(data, window_size):
     return np.mean(list(data)[-window_size:], axis=0)
 
+def calculate_centroid(landmarks):
+    x = np.mean([landmark.x for landmark in landmarks])
+    y = np.mean([landmark.y for landmark in landmarks])
+    z = np.mean([landmark.z for landmark in landmarks])
+    return [x, y, z]
+
 def main():
     args = get_args()
     cap = cv2.VideoCapture(args.device)
@@ -77,9 +83,10 @@ def main():
     landmark_buffer = deque(maxlen=buffer_size)
     distance_buffer = deque(maxlen=buffer_size)
     angle_buffer = deque(maxlen=buffer_size)
+    position_buffer = deque(maxlen=buffer_size)
 
     # Buffer to store sequences for dynamic gesture detection
-    sequence_length = 30
+    sequence_length = 45  # Example buffer length for dynamic gestures
     sequence_buffer = deque(maxlen=sequence_length)
 
     collecting_data = False
@@ -160,15 +167,21 @@ def main():
                     ]
                     angle_buffer.append(angles)
 
+                    # Calculate hand position (centroid of landmarks)
+                    hand_position = calculate_centroid(hand_landmarks.landmark)
+                    position_buffer.append(hand_position)
+
                     # Apply moving average to smooth the data
                     if len(landmark_buffer) == buffer_size:
                         smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
                         smoothed_distances = moving_average(distance_buffer, buffer_size)
                         smoothed_angles = moving_average(angle_buffer, buffer_size)
+                        smoothed_positions = moving_average(position_buffer, buffer_size)
                         
                         feature_list.extend(smoothed_landmarks)
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
+                        feature_list.extend(smoothed_positions)
                         
                         if collecting_data or not args.dynamic:
                             if args.dynamic:
@@ -188,7 +201,7 @@ def main():
                 print("#### stuttering? don't hold keys down with the camera window focused dummy ####")
             elif key == 27:
                 break
-            
+
     cap.release()
     log_queue.put((None, None, None))
     log_thread.join()
