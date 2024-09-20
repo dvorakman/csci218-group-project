@@ -30,6 +30,11 @@ def update(frame):
     ax2.cla()
     ax3.cla()
     
+    # Set background color to black
+    ax1.set_facecolor('black')
+    ax2.set_facecolor('black')
+    ax3.set_facecolor('black')
+    
     # Extract x, y, z coordinates for landmarks
     landmark_frame = landmarks[frame]
     x = landmark_frame[0::3]
@@ -37,31 +42,37 @@ def update(frame):
     z = landmark_frame[2::3]
     
     # Plot the landmarks
-    ax1.scatter(x, y, z, c='r', marker='o')
-    ax1.set_xlabel('X')
-    ax1.set_ylabel('Y')
-    ax1.set_zlabel('Z')
-    ax1.set_title(f'Landmarks - Frame {frame} - Label {frame_labels[frame]}')
+    ax1.scatter(x, y, z, c='white', marker='o')
+    ax1.set_xlabel('X', color='white')
+    ax1.set_ylabel('Y', color='white')
+    ax1.set_zlabel('Z', color='white')
+    ax1.set_title(f'Landmarks - Frame {frame} - Label {frame_labels[frame]}', color='white')
+    ax1.tick_params(colors='white')
     
     # Plot the distances
     distance_frame = distances[frame]
-    ax2.plot(distance_frame, 'bo-')
-    ax2.set_xlabel('Distance Index')
-    ax2.set_ylabel('Distance')
-    ax2.set_title(f'Distances - Frame {frame} - Label {frame_labels[frame]}')
+    ax2.plot(distance_frame, 'wo-')
+    ax2.set_xlabel('Distance Index', color='white')
+    ax2.set_ylabel('Distance', color='white')
+    ax2.set_title(f'Distances - Frame {frame} - Label {frame_labels[frame]}', color='white')
+    ax2.tick_params(colors='white')
     
     # Plot the angles
     angle_frame = angles[frame]
-    ax3.plot(angle_frame, 'go-')
-    ax3.set_xlabel('Angle Index')
-    ax3.set_ylabel('Angle (degrees)')
-    ax3.set_title(f'Angles - Frame {frame} - Label {frame_labels[frame]}')
+    ax3.plot(angle_frame, 'wo-')
+    ax3.set_xlabel('Angle Index', color='white')
+    ax3.set_ylabel('Angle (degrees)', color='white')
+    ax3.set_title(f'Angles - Frame {frame} - Label {frame_labels[frame]}', color='white')
+    ax3.tick_params(colors='white')
 
 # Create the figure and subplots
 fig = plt.figure(figsize=(15, 5))
 ax1 = fig.add_subplot(131, projection='3d')
 ax2 = fig.add_subplot(132)
 ax3 = fig.add_subplot(133)
+
+# Set figure background color to black
+fig.patch.set_facecolor('black')
 
 # Create the animation
 ani = FuncAnimation(fig, update, frames=len(landmark_data), interval=100)
