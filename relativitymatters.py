@@ -183,8 +183,12 @@ def main():
                         cv2.circle(image, (x, y), 5, (z_normalized, z_normalized, z_normalized), -1)
 
             cv2.imshow('MediaPipe Hands', image)
-            if cv2.waitKey(5) & 0xFF == 27:
+            key = cv2.waitKey(5)
+            if key != -1 and key != 27:
+                print("#### stuttering? don't hold keys down with the camera window focused dummy ####")
+            elif key == 27:
                 break
+            
     cap.release()
     log_queue.put((None, None, None))
     log_thread.join()
