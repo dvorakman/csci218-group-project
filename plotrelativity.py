@@ -1,10 +1,21 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+import sys
+
+# Get the label from command line arguments if provided
+label = sys.argv[1] if len(sys.argv) > 1 else None
 
 # Read the CSV file
 df = pd.read_csv('hand_landmarks.csv', header=None)
+
+# Filter by label if specified
+if label:
+    label = label.capitalize()
+    df = df[df[0] == label]
+
 landmark_data = df.iloc[:, 1:].values
+frame_labels = df.iloc[:, 0].values
 
 # Number of landmarks (21 points with x, y, z coordinates)
 num_landmarks = 21 * 3
@@ -30,21 +41,21 @@ def update(frame):
     ax1.set_xlabel('X')
     ax1.set_ylabel('Y')
     ax1.set_zlabel('Z')
-    ax1.set_title(f'Landmarks - Frame {frame}')
+    ax1.set_title(f'Landmarks - Frame {frame} - Label {frame_labels[frame]}')
     
     # Plot the distances
     distance_frame = distances[frame]
     ax2.plot(distance_frame, 'bo-')
     ax2.set_xlabel('Distance Index')
     ax2.set_ylabel('Distance')
-    ax2.set_title(f'Distances - Frame {frame}')
+    ax2.set_title(f'Distances - Frame {frame} - Label {frame_labels[frame]}')
     
     # Plot the angles
     angle_frame = angles[frame]
     ax3.plot(angle_frame, 'go-')
     ax3.set_xlabel('Angle Index')
     ax3.set_ylabel('Angle (degrees)')
-    ax3.set_title(f'Angles - Frame {frame}')
+    ax3.set_title(f'Angles - Frame {frame} - Label {frame_labels[frame]}')
 
 # Create the figure and subplots
 fig = plt.figure(figsize=(15, 5))
