@@ -1,3 +1,14 @@
+Including the z-axis when training a CNN model to determine hand gestures can be beneficial. Here are some reasons why:
+
+- **Depth Information**: The z-axis provides depth information, which can help differentiate between gestures that might appear similar in the x and y planes but differ in depth.
+- **3D Context**: Hand gestures are inherently three-dimensional. Including the z-axis helps in capturing the full 3D context of hand movements, leading to better accuracy.
+- **Occlusions**: In scenarios where parts of the hand occlude each other, depth information can help resolve ambiguities and provide clearer distinctions.
+- **Complex Gestures**: For complex gestures involving movements toward or away from the camera, the z-axis is crucial for accurate recognition.
+
+In conclusion, incorporating the z-axis can enhance the robustness and accuracy of hand gesture recognition models.
+
+
+
 When determining joint coordinates relative to each other using MediaPipe, improving gestures where fingers are crossed or have movement can be challenging. Here are some strategies to enhance the accuracy:
 
 1. **Incorporate Depth Information (z-axis)**:
