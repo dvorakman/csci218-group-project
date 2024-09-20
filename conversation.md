@@ -7,8 +7,6 @@ Including the z-axis when training a CNN model to determine hand gestures can be
 
 In conclusion, incorporating the z-axis can enhance the robustness and accuracy of hand gesture recognition models.
 
-
-
 When determining joint coordinates relative to each other using MediaPipe, improving gestures where fingers are crossed or have movement can be challenging. Here are some strategies to enhance the accuracy:
 
 1. **Incorporate Depth Information (z-axis)**:
