@@ -11,15 +11,16 @@ def get_args():
     parser.add_argument("--device", type=int, default=0)
     parser.add_argument("--width", type=int, default=1920)
     parser.add_argument("--height", type=int, default=1080)
-    parser.add_argument("--label_index", type=int, default=0)
+    parser.add_argument("--label", type=str, required=True, help='Label for the data')
     args = parser.parse_args()
+    args.label = args.label.capitalize()
     return args
 
-def logging_csv(label_index, feature_list):
+def logging_csv(label, feature_list):
     csv_path = "hand_landmarks.csv"
     with open(csv_path, "a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([label_index] + feature_list)
+        writer.writerow([label] + feature_list)
 
 def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2 + (point1.z - point2.z) ** 2)
@@ -120,7 +121,7 @@ def main():
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
                         
-                        logging_csv(args.label_index, feature_list)
+                        logging_csv(args.label, feature_list)
 
                     for landmark, world_landmark in zip(hand_landmarks.landmark, hand_world_landmarks.landmark):
                         z_normalized = int(np.interp(world_landmark.z, [-0.1, 0.1], [255, 0]))
