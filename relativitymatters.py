@@ -64,12 +64,6 @@ def calculate_angle(point1, point2, point3):
 def moving_average(data, window_size):
     return np.mean(list(data)[-window_size:], axis=0)
 
-def calculate_centroid(landmarks):
-    x = np.mean([landmark.x for landmark in landmarks])
-    y = np.mean([landmark.y for landmark in landmarks])
-    z = np.mean([landmark.z for landmark in landmarks])
-    return [x, y, z]
-
 def main():
     args = get_args()
     cap = cv2.VideoCapture(args.device)
@@ -83,7 +77,6 @@ def main():
     landmark_buffer = deque(maxlen=buffer_size)
     distance_buffer = deque(maxlen=buffer_size)
     angle_buffer = deque(maxlen=buffer_size)
-    position_buffer = deque(maxlen=buffer_size)
 
     # Buffer to store sequences for dynamic gesture detection
     sequence_length = 45  # Example buffer length for dynamic gestures
@@ -116,6 +109,13 @@ def main():
         min_tracking_confidence=0.75) as hands:
         
         while cap.isOpened():
+            key = cv2.waitKey(5)
+            if key != -1 and key != 27:
+                print(f"don't hold any keys such as {chr(key)} other than ESC while camera window is focused - this causes stuttering")
+                break
+            elif key == 27:
+                break
+
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
@@ -167,21 +167,15 @@ def main():
                     ]
                     angle_buffer.append(angles)
 
-                    # Calculate hand position (centroid of landmarks)
-                    hand_position = calculate_centroid(hand_landmarks.landmark)
-                    position_buffer.append(hand_position)
-
                     # Apply moving average to smooth the data
                     if len(landmark_buffer) == buffer_size:
                         smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
                         smoothed_distances = moving_average(distance_buffer, buffer_size)
                         smoothed_angles = moving_average(angle_buffer, buffer_size)
-                        smoothed_positions = moving_average(position_buffer, buffer_size)
                         
                         feature_list.extend(smoothed_landmarks)
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
-                        feature_list.extend(smoothed_positions)
                         
                         if collecting_data or not args.dynamic:
                             if args.dynamic:
@@ -196,11 +190,6 @@ def main():
                         cv2.circle(image, (x, y), 5, (z_normalized, z_normalized, z_normalized), -1)
 
             cv2.imshow('MediaPipe Hands', image)
-            key = cv2.waitKey(5)
-            if key != -1 and key != 27:
-                print("#### stuttering? don't hold keys down with the camera window focused dummy ####")
-            elif key == 27:
-                break
 
     cap.release()
     log_queue.put((None, None, None))
