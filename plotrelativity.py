@@ -222,6 +222,7 @@ if dynamic_data:
 else:
     # Plot static data if no dynamic data is available
     for label, data in static_data:
-        plot_static(data)
+        print(data.shape)
+        # plot_static(data)
 
-plt.show()
+# plt.show()
