@@ -7,6 +7,7 @@ import sys
 
 # Get the label from command line arguments if provided
 label = sys.argv[1] if len(sys.argv) > 1 else None
+label = label.capitalize() if label else None
 
 # Define paths to dynamic and static data directories
 dynamic_data_dir = 'data/dynamic'
@@ -34,7 +35,7 @@ static_data = read_csv_files(static_data_dir, label)
 
 # Number of landmarks (21 points with x, y, z coordinates)
 num_landmarks = 21 * 3
-feature_list_length = 91
+feature_list_length = 88
 
 # Define connections between landmarks
 connections = [
@@ -45,13 +46,16 @@ connections = [
     (0, 17), (17, 18), (18, 19), (19, 20)  # Pinky
 ]
 
-# Initialize a list to store the positions for tracing the path
-path_positions = []
+# Initialize buffers to store the positions for tracing the path
+buffer_size = 10  # Number of frames to keep in the buffer
+thumb_positions = []
+index_positions = []
+middle_positions = []
+ring_positions = []
+pinky_positions = []
 
 def update_dynamic(frame, data):
-    global path_positions
-    if frame == 0:
-        path_positions = []  # Clear the path at the start of a new animation sequence
+    global thumb_positions, index_positions, middle_positions, ring_positions, pinky_positions
     
     ax1.cla()  # Clear the previous frame
     ax2.cla()
@@ -101,19 +105,51 @@ def update_dynamic(frame, data):
     ax3.set_title(f'Dynamic Angles - Frame {frame}', color='white')
     ax3.tick_params(colors='white')
     
-    # Extract and plot the positions
-    position_start_idx = end_idx + 25
-    position_end_idx = position_start_idx + 3
-    position_frame = data.iloc[0, position_start_idx:position_end_idx].values
-    ax1.scatter(position_frame[0], position_frame[1], position_frame[2], c='red', marker='x', s=100)
+    # Append the current positions of the fingertips to their respective lists
+    thumb_positions.append([x[4], y[4], z[4]])
+    index_positions.append([x[8], y[8], z[8]])
+    middle_positions.append([x[12], y[12], z[12]])
+    ring_positions.append([x[16], y[16], z[16]])
+    pinky_positions.append([x[20], y[20], z[20]])
     
-    # Append the current position to the path_positions list
-    path_positions.append(position_frame)
+    # Keep only the last 'buffer_size' positions in the lists
+    if len(thumb_positions) > buffer_size:
+        thumb_positions.pop(0)
+    if len(index_positions) > buffer_size:
+        index_positions.pop(0)
+    if len(middle_positions) > buffer_size:
+        middle_positions.pop(0)
+    if len(ring_positions) > buffer_size:
+        ring_positions.pop(0)
+    if len(pinky_positions) > buffer_size:
+        pinky_positions.pop(0)
     
-    # Plot the path taken by the hand landmarks
-    if len(path_positions) > 1:
-        path_positions_array = np.array(path_positions)
-        ax1.plot(path_positions_array[:, 0], path_positions_array[:, 1], path_positions_array[:, 2], c='yellow')
+    # Plot the paths taken by the fingertips with fading effect
+    for i in range(1, len(thumb_positions)):
+        alpha = i / len(thumb_positions)
+        ax1.plot([thumb_positions[i-1][0], thumb_positions[i][0]], 
+                 [thumb_positions[i-1][1], thumb_positions[i][1]], 
+                 [thumb_positions[i-1][2], thumb_positions[i][2]], c='yellow', alpha=alpha)
+    for i in range(1, len(index_positions)):
+        alpha = i / len(index_positions)
+        ax1.plot([index_positions[i-1][0], index_positions[i][0]], 
+                 [index_positions[i-1][1], index_positions[i][1]], 
+                 [index_positions[i-1][2], index_positions[i][2]], c='cyan', alpha=alpha)
+    for i in range(1, len(middle_positions)):
+        alpha = i / len(middle_positions)
+        ax1.plot([middle_positions[i-1][0], middle_positions[i][0]], 
+                 [middle_positions[i-1][1], middle_positions[i][1]], 
+                 [middle_positions[i-1][2], middle_positions[i][2]], c='magenta', alpha=alpha)
+    for i in range(1, len(ring_positions)):
+        alpha = i / len(ring_positions)
+        ax1.plot([ring_positions[i-1][0], ring_positions[i][0]], 
+                 [ring_positions[i-1][1], ring_positions[i][1]], 
+                 [ring_positions[i-1][2], ring_positions[i][2]], c='green', alpha=alpha)
+    for i in range(1, len(pinky_positions)):
+        alpha = i / len(pinky_positions)
+        ax1.plot([pinky_positions[i-1][0], pinky_positions[i][0]], 
+                 [pinky_positions[i-1][1], pinky_positions[i][1]], 
+                 [pinky_positions[i-1][2], pinky_positions[i][2]], c='blue', alpha=alpha)
 
 def plot_static(data):
     ax1.cla()  # Clear the previous frame
@@ -175,11 +211,14 @@ fig.patch.set_facecolor('black')
 
 # Plot dynamic data if available
 if dynamic_data:
-    for label, data in dynamic_data:
-        print(f"Plotting dynamic data for label: {label}")
-        print(data.shape)
-        num_frames = data.shape[1] // feature_list_length
-        ani = FuncAnimation(fig, update_dynamic, frames=num_frames, fargs=(data,), interval=100)
+    combined_data = pd.concat([data for label, data in dynamic_data], ignore_index=True)
+    combined_data = combined_data.stack().reset_index(drop=True).to_frame().T
+    print(f"Combined data shape: {combined_data.shape}")
+    combined_data = combined_data.dropna(axis=1)
+    num_frames = combined_data.shape[1] // feature_list_length
+
+    ani = FuncAnimation(fig, update_dynamic, frames=num_frames, fargs=(combined_data,), interval=100)
+
 else:
     # Plot static data if no dynamic data is available
     for label, data in static_data:
