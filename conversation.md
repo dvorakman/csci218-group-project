@@ -382,3 +382,22 @@ In practice, for both models, your **dataframe** should organize the data so tha
 - **CNN + RNN for dynamic gestures**: After extracting spatial features with CNN, the input to the RNN would be **(N, T, F)**, where **F** is the number of features extracted from each frame.
 
 This setup ensures that the CNN focuses on the spatial aspects of each frame and the RNN captures temporal dependencies across multiple frames.
+
+```python
+def process_h5_files(directory):
+    X = []
+    y = []
+    for file in os.listdir(directory):
+        if file.endswith(".h5"):
+            filepath = os.path.join(directory, file)
+            with h5py.File(filepath, "r") as f:
+                # List all datasets in the file
+                print(f"Datasets in {file}: {list(f.keys())}")
+                
+                for dataset_name in f.keys():
+                    data = f[dataset_name][:]
+                    label = file.split(".")[0]  # Extract label from filename
+                    X.append(data)
+                    y.append(label)
+    return X, y
+```
