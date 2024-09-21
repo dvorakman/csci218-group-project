@@ -2,13 +2,16 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import argparse
-import csv
+import h5py
 import math
 from collections import deque
 import os
 import threading
 import queue
 from pynput import keyboard
+from fastdtw import fastdtw
+from scipy.interpolate import interp1d
+import re
 
 # Create a queue for logging tasks
 log_queue = queue.Queue()
@@ -18,7 +21,14 @@ def logging_worker():
         feature_list, label, dynamic = log_queue.get()
         if feature_list is None:
             break
-        logging_csv(feature_list, label, dynamic)
+        if dynamic:
+            # Dynamic gestures: (N, T, 88)
+            feature_list = np.array(feature_list).reshape(-1, len(feature_list), 88)
+        else:
+            # Static gestures: (N, 88, 1)
+            feature_list = np.array(feature_list).reshape(-1, 88, 1)
+        print(f'shape of feature_list: {feature_list.shape}')
+        save_hdf5(feature_list, label, dynamic)
         log_queue.task_done()
 
 # Start the logging thread
@@ -36,17 +46,20 @@ def get_args():
     args.label = args.label.capitalize()
     return args
 
-def logging_csv(sequence, label, dynamic):
+def save_hdf5(sequence, label, dynamic):
     folder = 'dynamic' if dynamic else 'static'
-    csv_path = f"data/{folder}/{label}.csv"
-    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
-    with open(csv_path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if dynamic:
-            flattened_sequence = [item for sublist in sequence for item in sublist]
-            writer.writerow(flattened_sequence)
+    hdf5_path = f"data/{folder}/{label}.h5"
+    os.makedirs(os.path.dirname(hdf5_path), exist_ok=True)
+    with h5py.File(hdf5_path, 'a') as f:
+        # Extract numeric part of the keys and sort them numerically
+        keys = list(f.keys())
+        if keys:
+            numeric_keys = sorted([int(re.findall(r'\d+', key)[0]) for key in keys])
+            next_index = numeric_keys[-1] + 1
         else:
-            writer.writerow(sequence)
+            next_index = 0
+        dset_name = f"{label}_{next_index}"
+        f.create_dataset(dset_name, data=np.array(sequence))
 
 def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2 + (point1.z - point2.z) ** 2)
@@ -66,6 +79,10 @@ def moving_average(data, window_size):
 
 def main():
     args = get_args()
+
+    # Define a reference sequence (e.g., the first recorded sequence)
+    reference_sequence = None
+
     cap = cv2.VideoCapture(args.device)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
@@ -79,7 +96,7 @@ def main():
     angle_buffer = deque(maxlen=buffer_size)
 
     # Buffer to store sequences for dynamic gesture detection
-    sequence_length = 45  # Example buffer length for dynamic gestures
+    sequence_length = 64
     sequence_buffer = deque(maxlen=sequence_length)
 
     collecting_data = False
@@ -97,9 +114,8 @@ def main():
                 log_queue.put((list(sequence_buffer), args.label, args.dynamic))
                 sequence_buffer.clear()
 
-    if args.dynamic:
-        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        listener.start()
+    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    listener.start()
 
     with mp_hands.Hands(
         static_image_mode=False,
@@ -111,7 +127,7 @@ def main():
         while cap.isOpened():
             key = cv2.waitKey(5)
             if key != -1 and key != 27:
-                print(f"don't hold any keys such as {chr(key)} other than ESC while camera window is focused - this causes stuttering")
+                print(f"don't press any keys while the camera window is focused, other than to quit of course - this causes stuttering")
                 break
             elif key == 27:
                 break
@@ -177,7 +193,7 @@ def main():
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
                         
-                        if collecting_data or not args.dynamic:
+                        if collecting_data:
                             if args.dynamic:
                                 sequence_buffer.append(feature_list)
                             else:
