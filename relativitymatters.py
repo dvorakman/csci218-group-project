@@ -9,8 +9,6 @@ import os
 import threading
 import queue
 from pynput import keyboard
-from fastdtw import fastdtw
-from scipy.interpolate import interp1d
 import re
 
 # Create a queue for logging tasks
@@ -80,9 +78,6 @@ def moving_average(data, window_size):
 def main():
     args = get_args()
 
-    # Define a reference sequence (e.g., the first recorded sequence)
-    reference_sequence = None
-
     cap = cv2.VideoCapture(args.device)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
@@ -96,7 +91,7 @@ def main():
     angle_buffer = deque(maxlen=buffer_size)
 
     # Buffer to store sequences for dynamic gesture detection
-    sequence_length = 64
+    sequence_length = 60
     sequence_buffer = deque(maxlen=sequence_length)
 
     collecting_data = False
