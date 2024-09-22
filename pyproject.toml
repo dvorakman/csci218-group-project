@@ -16,7 +16,7 @@ pynput = "^1.7.7"
 nvidia-cudnn-cu11 = "8.6.0.163"
 nvidia-cuda-runtime-cu11 = "11.8.89"
 nvidia-cuda-nvcc-cu11 = "11.8.89"
-tensorflow = "^2.17.0"
+tensorflow = {extras = ["and-cuda"], version = "^2.17.0"}
 
 
 [tool.poetry.group.dev.dependencies]
