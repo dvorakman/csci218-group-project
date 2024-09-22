@@ -24,7 +24,7 @@ def print_dataset_shapes(data_folder):
                     total_shape = []
                     for key in keys:
                         data = hdf[key]
-                        print(f"{subindent}    {key} - Shape: {data.shape}")
+                        # print(f"{subindent}    {key} - Shape: {data.shape}")
                         total_shape.append(data.shape)
                     # Print the shape of the sub-indent (summary of all shapes)
                     if total_shape:
