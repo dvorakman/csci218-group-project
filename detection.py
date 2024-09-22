@@ -24,14 +24,14 @@ from collections import deque
 import os
 import time
 
-# Load the pre-trained models
-with tf.device('/GPU:0' if gpus else '/CPU:0'):
-    cnn_model = tf.keras.models.load_model('hand_landmarks_cnn_model.keras')
-    rnn_model = tf.keras.models.load_model('relativitymatters_rnn_model.keras')
+# # Load the pre-trained models
+# with tf.device('/GPU:0' if gpus else '/CPU:0'):
+cnn_model = tf.keras.models.load_model('hand_landmarks_cnn_model.keras')
+rnn_model = tf.keras.models.load_model('relativitymatters_rnn_model.keras')
 
 # Define the hand gesture labels
 # static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']]
-static_labels = ['A', 'B', 'C', 'D', 'E', 'M', 'N']
+static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
 dynamic_labels = ['J', 'Z']
 all_labels = static_labels + dynamic_labels
 
@@ -155,127 +155,127 @@ def main():
         min_detection_confidence=0.75,
         min_tracking_confidence=0.75) as hands:
         
-        with tf.device('/GPU:0' if gpus else '/CPU:0'):
-            while cap.isOpened():
-                success, image = cap.read()
-                if not success:
-                    print("Ignoring empty camera frame.")
-                    continue
+        # with tf.device('/GPU:0' if gpus else '/CPU:0'):
+        while cap.isOpened():
+            success, image = cap.read()
+            if not success:
+                print("Ignoring empty camera frame.")
+                continue
 
-                # Calculate FPS
-                current_frame_time = time.time()
-                fps = 1 / (current_frame_time - prev_frame_time)
-                prev_frame_time = current_frame_time
+            # Calculate FPS
+            current_frame_time = time.time()
+            fps = 1 / (current_frame_time - prev_frame_time)
+            prev_frame_time = current_frame_time
 
-                image = cv2.flip(image, 1)
-                results = hands.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+            image = cv2.flip(image, 1)
+            results = hands.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
-                if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
-                    for hand_landmarks, hand_world_landmarks in zip(results.multi_hand_landmarks, results.multi_hand_world_landmarks):
-                        # Draw hand landmarks
-                        image = draw_hand_landmarks(image, hand_landmarks)
+            if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
+                for hand_landmarks, hand_world_landmarks in zip(results.multi_hand_landmarks, results.multi_hand_world_landmarks):
+                    # Draw hand landmarks
+                    image = draw_hand_landmarks(image, hand_landmarks)
 
-                        feature_list = []
-                        landmarks = []
-                        for landmark in hand_landmarks.landmark:
-                            landmarks.extend([landmark.x, landmark.y, landmark.z])
-                        landmark_buffer.append(landmarks)
+                    feature_list = []
+                    landmarks = []
+                    for landmark in hand_landmarks.landmark:
+                        landmarks.extend([landmark.x, landmark.y, landmark.z])
+                    landmark_buffer.append(landmarks)
+                    
+                    # Calculate distances between key points
+                    distances = [
+                        calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[4]),
+                        calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[8]),
+                        calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[12]),
+                        calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[16]),
+                        calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[20]),
+                        calculate_distance(hand_landmarks.landmark[4], hand_landmarks.landmark[8]),
+                        calculate_distance(hand_landmarks.landmark[8], hand_landmarks.landmark[12]),
+                        calculate_distance(hand_landmarks.landmark[12], hand_landmarks.landmark[16]),
+                        calculate_distance(hand_landmarks.landmark[16], hand_landmarks.landmark[20]),
+                        calculate_distance(hand_landmarks.landmark[5], hand_landmarks.landmark[9]),
+                        calculate_distance(hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
+                        calculate_distance(hand_landmarks.landmark[13], hand_landmarks.landmark[17])
+                    ]
+                    distance_buffer.append(distances)
+
+                    # Calculate angles between joints
+                    angles = [
+                        calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2], hand_landmarks.landmark[3]),
+                        calculate_angle(hand_landmarks.landmark[2], hand_landmarks.landmark[3], hand_landmarks.landmark[4]),
+                        calculate_angle(hand_landmarks.landmark[5], hand_landmarks.landmark[6], hand_landmarks.landmark[7]),
+                        calculate_angle(hand_landmarks.landmark[6], hand_landmarks.landmark[7], hand_landmarks.landmark[8]),
+                        calculate_angle(hand_landmarks.landmark[9], hand_landmarks.landmark[10], hand_landmarks.landmark[11]),
+                        calculate_angle(hand_landmarks.landmark[10], hand_landmarks.landmark[11], hand_landmarks.landmark[12]),
+                        calculate_angle(hand_landmarks.landmark[13], hand_landmarks.landmark[14], hand_landmarks.landmark[15]),
+                        calculate_angle(hand_landmarks.landmark[14], hand_landmarks.landmark[15], hand_landmarks.landmark[16]),
+                        calculate_angle(hand_landmarks.landmark[17], hand_landmarks.landmark[18], hand_landmarks.landmark[19]),
+                        calculate_angle(hand_landmarks.landmark[18], hand_landmarks.landmark[19], hand_landmarks.landmark[20]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[5], hand_landmarks.landmark[9]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13], hand_landmarks.landmark[17])
+                    ]
+                    angle_buffer.append(angles)
+
+                    # Apply moving average to smooth the data
+                    if len(landmark_buffer) == buffer_size:
+                        smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
+                        smoothed_distances = moving_average(distance_buffer, buffer_size)
+                        smoothed_angles = moving_average(angle_buffer, buffer_size)
                         
-                        # Calculate distances between key points
-                        distances = [
-                            calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[4]),
-                            calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[8]),
-                            calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[12]),
-                            calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[16]),
-                            calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[20]),
-                            calculate_distance(hand_landmarks.landmark[4], hand_landmarks.landmark[8]),
-                            calculate_distance(hand_landmarks.landmark[8], hand_landmarks.landmark[12]),
-                            calculate_distance(hand_landmarks.landmark[12], hand_landmarks.landmark[16]),
-                            calculate_distance(hand_landmarks.landmark[16], hand_landmarks.landmark[20]),
-                            calculate_distance(hand_landmarks.landmark[5], hand_landmarks.landmark[9]),
-                            calculate_distance(hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
-                            calculate_distance(hand_landmarks.landmark[13], hand_landmarks.landmark[17])
-                        ]
-                        distance_buffer.append(distances)
+                        feature_list.extend(smoothed_landmarks)
+                        feature_list.extend(smoothed_distances)
+                        feature_list.extend(smoothed_angles)
 
-                        # Calculate angles between joints
-                        angles = [
-                            calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2], hand_landmarks.landmark[3]),
-                            calculate_angle(hand_landmarks.landmark[2], hand_landmarks.landmark[3], hand_landmarks.landmark[4]),
-                            calculate_angle(hand_landmarks.landmark[5], hand_landmarks.landmark[6], hand_landmarks.landmark[7]),
-                            calculate_angle(hand_landmarks.landmark[6], hand_landmarks.landmark[7], hand_landmarks.landmark[8]),
-                            calculate_angle(hand_landmarks.landmark[9], hand_landmarks.landmark[10], hand_landmarks.landmark[11]),
-                            calculate_angle(hand_landmarks.landmark[10], hand_landmarks.landmark[11], hand_landmarks.landmark[12]),
-                            calculate_angle(hand_landmarks.landmark[13], hand_landmarks.landmark[14], hand_landmarks.landmark[15]),
-                            calculate_angle(hand_landmarks.landmark[14], hand_landmarks.landmark[15], hand_landmarks.landmark[16]),
-                            calculate_angle(hand_landmarks.landmark[17], hand_landmarks.landmark[18], hand_landmarks.landmark[19]),
-                            calculate_angle(hand_landmarks.landmark[18], hand_landmarks.landmark[19], hand_landmarks.landmark[20]),
-                            calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[5], hand_landmarks.landmark[9]),
-                            calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
-                            calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13], hand_landmarks.landmark[17])
-                        ]
-                        angle_buffer.append(angles)
+                        sequence_buffer.append(feature_list)
 
-                        # Apply moving average to smooth the data
-                        if len(landmark_buffer) == buffer_size:
-                            smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
-                            smoothed_distances = moving_average(distance_buffer, buffer_size)
-                            smoothed_angles = moving_average(angle_buffer, buffer_size)
-                            
-                            feature_list.extend(smoothed_landmarks)
-                            feature_list.extend(smoothed_distances)
-                            feature_list.extend(smoothed_angles)
+                        # Predict using both models
+                        if len(sequence_buffer) == sequence_length:
+                            cnn_input = np.array(feature_list).reshape(1, 1, 88)
+                            rnn_input = np.array(sequence_buffer).reshape(1, sequence_length, 88)
 
-                            sequence_buffer.append(feature_list)
+                            cnn_prediction = cnn_model.predict(cnn_input, verbose=0)
+                            rnn_prediction = rnn_model.predict(rnn_input, verbose=0)
 
-                            # Predict using both models
-                            if len(sequence_buffer) == sequence_length:
-                                cnn_input = np.array(feature_list).reshape(1, 1, 88)
-                                rnn_input = np.array(sequence_buffer).reshape(1, sequence_length, 88)
+                            # Decision mechanism
+                            CNN_THRESHOLD = 0.60  # Increased to be more selective
+                            RNN_THRESHOLD = 0.99 # Slightly increased for dynamic gestures
 
-                                cnn_prediction = cnn_model.predict(cnn_input, verbose=0)
-                                rnn_prediction = rnn_model.predict(rnn_input, verbose=0)
-
-                                # Decision mechanism
-                                CNN_THRESHOLD = 0.98  # Increased to be more selective
-                                RNN_THRESHOLD = 0.90  # Slightly increased for dynamic gestures
-
-                                cnn_confidence = np.max(cnn_prediction)
-                                rnn_confidence = np.max(rnn_prediction)
-
-                                if rnn_confidence > RNN_THRESHOLD:
-                                    # If RNN is very confident, trust it for dynamic gestures
+                            cnn_confidence = np.max(cnn_prediction)
+                            rnn_confidence = np.max(rnn_prediction)
+                            # rnn_confidence = 0
+                            if rnn_confidence > RNN_THRESHOLD:
+                                # Only trust RNN if it's extremely confident
+                                current_gesture = dynamic_labels[np.argmax(rnn_prediction)]
+                                model_used = "RNN"
+                                confidence = rnn_confidence
+                            elif cnn_confidence > CNN_THRESHOLD:
+                                # If CNN is very confident, trust it for static gestures
+                                current_gesture = static_labels[np.argmax(cnn_prediction)]
+                                model_used = "CNN"
+                                confidence = rnn_confidence
+                            else:
+                                # neither model is very confident, compare their confidence
+                                if rnn_confidence > cnn_confidence * 0.95:
                                     current_gesture = dynamic_labels[np.argmax(rnn_prediction)]
                                     model_used = "RNN"
                                     confidence = rnn_confidence
-                                elif cnn_confidence > CNN_THRESHOLD:
-                                    # Only trust CNN if it's extremely confident
+                                else:  # Give slight advantage to CNN
                                     current_gesture = static_labels[np.argmax(cnn_prediction)]
                                     model_used = "CNN"
                                     confidence = cnn_confidence
-                                else:
-                                    # If neither model is very confident, compare their confidences
-                                    if rnn_confidence > cnn_confidence * 0.95:  # Give slight advantage to RNN
-                                        current_gesture = dynamic_labels[np.argmax(rnn_prediction)]
-                                        model_used = "RNN"
-                                        confidence = rnn_confidence
-                                    else:
-                                        current_gesture = static_labels[np.argmax(cnn_prediction)]
-                                        model_used = "CNN"
-                                        confidence = cnn_confidence
 
-                                print(f"""
-                                      RNN: {dynamic_labels[np.argmax(rnn_prediction)]} (conf: {rnn_confidence:.4f})
-                                      CNN: {static_labels[np.argmax(cnn_prediction)]} (conf: {cnn_confidence:.4f})"
-                                      Chosen: {model_used} - {current_gesture} (conf: {confidence:.4f})
-                                      """, end="\r")
+                            print(f"""
+                                    RNN: {dynamic_labels[np.argmax(rnn_prediction)]} (conf: {rnn_confidence:.4f})
+                                    CNN: {static_labels[np.argmax(cnn_prediction)]} (conf: {cnn_confidence:.4f})"
+                                    Chosen: {model_used} - {current_gesture} (conf: {confidence:.4f})
+                                    """, end="\r")
 
-                # Draw info on the image
-                image = draw_info(image, fps, current_gesture, model_used, confidence)
+            # Draw info on the image
+            image = draw_info(image, fps, current_gesture, model_used, confidence)
 
-                cv2.imshow('Hand Gesture Recognition', image)
-                if cv2.waitKey(5) & 0xFF == 27:
-                    break
+            cv2.imshow('Hand Gesture Recognition', image)
+            if cv2.waitKey(5) & 0xFF == 27:
+                break
 
     cap.release()
     cv2.destroyAllWindows()
