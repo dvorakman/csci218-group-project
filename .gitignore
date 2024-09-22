@@ -136,3 +136,4 @@ dmypy.json
 
 # fuck poetry
 poetry.lock
+pyproject.toml
