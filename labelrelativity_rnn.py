@@ -6,17 +6,16 @@ import h5py
 import math
 from collections import deque
 import os
-import threading
-import queue
-from pynput import keyboard
-import re
 import tensorflow as tf
 
-# Load the pre-trained RNN model
-model = tf.keras.models.load_model('relativitymatters_rnn_model.keras')
+# Load the pre-trained models
+cnn_model = tf.keras.models.load_model('hand_landmarks_cnn_model.keras')
+rnn_model = tf.keras.models.load_model('relativitymatters_rnn_model.keras')
 
 # Define the hand gesture labels
-labels = ['J', 'Z']
+static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
+dynamic_labels = ['J', 'Z']
+all_labels = static_labels + dynamic_labels
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -69,13 +68,6 @@ def main():
         min_tracking_confidence=0.75) as hands:
         
         while cap.isOpened():
-            key = cv2.waitKey(5)
-            if key != -1 and key != 27:
-                print(f"don't press any keys while the camera window is focused, other than to quit of course - this causes stuttering")
-                break
-            elif key == 27:
-                break
-
             success, image = cap.read()
             if not success:
                 print("Ignoring empty camera frame.")
@@ -139,11 +131,24 @@ def main():
 
                         sequence_buffer.append(feature_list)
 
+                        # Predict using both models
                         if len(sequence_buffer) == sequence_length:
-                            sequence_array = np.array(sequence_buffer).reshape(1, sequence_length, -1)
-                            prediction = model.predict(sequence_array)
-                            label = labels[np.argmax(prediction)]
-                            print(f"Predicted gesture: {label}")
+                            cnn_input = np.array(feature_list).reshape(1, -1, 1)
+                            rnn_input = np.array(sequence_buffer).reshape(1, sequence_length, -1)
+
+                            cnn_prediction = cnn_model.predict(cnn_input)
+                            rnn_prediction = rnn_model.predict(rnn_input)
+
+                            # Decision mechanism
+                            cnn_confidence = np.max(cnn_prediction)
+                            rnn_confidence = np.max(rnn_prediction)
+                            
+                            if rnn_confidence > 0.8:  # Adjust this threshold as needed
+                                gesture = dynamic_labels[np.argmax(rnn_prediction)]
+                            else:
+                                gesture = static_labels[np.argmax(cnn_prediction)]
+
+                            print(f"Predicted gesture: {gesture}")
 
                     for landmark, world_landmark in zip(hand_landmarks.landmark, hand_world_landmarks.landmark):
                         z_normalized = int(np.interp(world_landmark.z, [-0.1, 0.1], [255, 0]))
@@ -152,6 +157,8 @@ def main():
                         cv2.circle(image, (x, y), 5, (z_normalized, z_normalized, z_normalized), -1)
 
             cv2.imshow('MediaPipe Hands', image)
+            if cv2.waitKey(5) & 0xFF == 27:
+                break
 
     cap.release()
 
