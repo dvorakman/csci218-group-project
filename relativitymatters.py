@@ -24,7 +24,7 @@ def logging_worker():
             feature_list = np.array(feature_list).reshape(-1, len(feature_list), 88)
         else:
             # Static gestures: (N, 88, 1)
-            feature_list = np.array(feature_list).reshape(-1, 88, 1)
+            feature_list = np.array(feature_list).reshape(-1, 1, 88)
         print(f'shape of feature_list: {feature_list.shape}')
         save_hdf5(feature_list, label, dynamic)
         log_queue.task_done()
