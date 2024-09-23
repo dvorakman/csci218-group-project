@@ -32,7 +32,7 @@ rnn_model = tf.keras.models.load_model('models/dynamic_rnn.keras')
 # Define the hand gesture labels
 # static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']]
 static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
-dynamic_labels = ['[clear]', '[sumbit]', 'J', 'Z']
+dynamic_labels = ['J', 'Z']
 all_labels = static_labels + dynamic_labels
 
 def get_args():
