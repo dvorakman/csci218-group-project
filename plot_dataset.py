@@ -3,59 +3,38 @@ import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 import numpy as np
 import os
-import sys
+import h5py
+import argparse
 
-# Get the label from command line arguments if provided
-label = sys.argv[1] if len(sys.argv) > 1 else None
-label = label.capitalize() if label else None
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dynamic", action='store_true', help='Dynamic gesture dataset')
+    args = parser.parse_args()
+    return args
 
-# Define paths to dynamic and static data directories
-dynamic_data_dir = 'data/dynamic'
-static_data_dir = 'data/static'
+def read_h5_files(directory):
+    X = []
+    y = []
+    for file in os.listdir(directory):
+        if file.endswith(".h5"):
+            filepath = os.path.join(directory, file)
+            with h5py.File(filepath, "r") as f:
+                # List all datasets in the file
+                # print(f"Datasets in {file}: {list(f.keys())}")
+                
+                for dataset_name in f.keys():
+                    # Read the dataset (each sequence has variable length)
+                    data = f[dataset_name][:]
+                    label = file.split(".")[0]  # Extract label from filename
+                    
+                    # Append data and label
+                    X.append(data)
+                    y.append(label)
+    
+    # Return X as a list and y as a NumPy array
+    return X, np.array(y)
 
-# Function to read CSV files from a directory
-def read_csv_files(directory, label=None):
-    data = []
-    files = os.listdir(directory)
-    for file in files:
-        if file.endswith('.csv'):
-            file_label = os.path.splitext(file)[0]
-            if label is None or file_label == label:
-                file_path = os.path.join(directory, file)
-                try:
-                    df = pd.read_csv(file_path, header=None, on_bad_lines='skip')
-                    data.append((file_label, df))
-                except pd.errors.EmptyDataError:
-                    print(f"Skipping empty file: {file_path}")
-    return data
-
-# Read dynamic and static data
-dynamic_data = read_csv_files(dynamic_data_dir, label)
-static_data = read_csv_files(static_data_dir, label)
-
-# Number of landmarks (21 points with x, y, z coordinates)
-num_landmarks = 21 * 3
-feature_list_length = 88
-
-# Define connections between landmarks
-connections = [
-    (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
-    (0, 5), (5, 6), (6, 7), (7, 8),  # Index finger
-    (0, 9), (9, 10), (10, 11), (11, 12),  # Middle finger
-    (0, 13), (13, 14), (14, 15), (15, 16),  # Ring finger
-    (0, 17), (17, 18), (18, 19), (19, 20)  # Pinky
-]
-
-# Initialize buffers to store the positions for tracing the path
-buffer_size = 10  # Number of frames to keep in the buffer
-thumb_positions = []
-index_positions = []
-middle_positions = []
-ring_positions = []
-pinky_positions = []
-
-def update_dynamic(frame, data):
-    global thumb_positions, index_positions, middle_positions, ring_positions, pinky_positions
+def update_dynamic(frame, data, label):
     
     ax1.cla()  # Clear the previous frame
     ax2.cla()
@@ -66,12 +45,14 @@ def update_dynamic(frame, data):
     ax2.set_facecolor('black')
     ax3.set_facecolor('black')
     
-    # Calculate the start and end indices for the current frame
-    start_idx = frame * feature_list_length
-    end_idx = start_idx + num_landmarks
+    # # Calculate the start and end indices for the current frame
+    # start_idx = frame * feature_list_length
+    # end_idx = start_idx + num_landmarks
     
-    # Extract x, y, z coordinates for landmarks
-    landmark_frame = data.iloc[0, start_idx:end_idx].values
+    # # Extract x, y, z coordinates for landmarks
+    # landmark_frame = data.iloc[0, start_idx:end_idx].values
+    landmark_frame = data[frame][0][0, :num_landmarks]
+    
     x = landmark_frame[0::3]
     y = landmark_frame[1::3]
     z = landmark_frame[2::3]
@@ -81,7 +62,7 @@ def update_dynamic(frame, data):
     ax1.set_xlabel('X', color='white')
     ax1.set_ylabel('Y', color='white')
     ax1.set_zlabel('Z', color='white')
-    ax1.set_title(f'Dynamic Landmarks - Frame {frame}', color='white')
+    ax1.set_title(f'Dynamic Landmarks - Label {label[frame]} - Frame {frame}', color='white')
     ax1.tick_params(colors='white')
     
     # Draw lines between the landmarks
@@ -90,7 +71,7 @@ def update_dynamic(frame, data):
         ax1.plot([x[start], x[end]], [y[start], y[end]], [z[start], z[end]], 'white')
     
     # Extract and plot the distances
-    distance_frame = data.iloc[0, end_idx:end_idx + 12].values
+    distance_frame = data[frame][0][0, num_landmarks:num_landmarks + 12]
     ax2.plot(distance_frame, 'wo-')
     ax2.set_xlabel('Distance Index', color='white')
     ax2.set_ylabel('Distance', color='white')
@@ -98,7 +79,7 @@ def update_dynamic(frame, data):
     ax2.tick_params(colors='white')
     
     # Extract and plot the angles
-    angle_frame = data.iloc[0, end_idx + 12:end_idx + 25].values
+    angle_frame = data[frame][0][0, num_landmarks+12:num_landmarks + 25]
     ax3.plot(angle_frame, 'wo-')
     ax3.set_xlabel('Angle Index', color='white')
     ax3.set_ylabel('Angle (degrees)', color='white')
@@ -151,7 +132,7 @@ def update_dynamic(frame, data):
                  [pinky_positions[i-1][1], pinky_positions[i][1]], 
                  [pinky_positions[i-1][2], pinky_positions[i][2]], c='blue', alpha=alpha)
 
-def plot_static(data):
+def update_static(frame, data, label):
     ax1.cla()  # Clear the previous frame
     ax2.cla()
     ax3.cla()
@@ -160,19 +141,19 @@ def plot_static(data):
     ax1.set_facecolor('black')
     ax2.set_facecolor('black')
     ax3.set_facecolor('black')
-    
-    # Extract x, y, z coordinates for landmarks
-    landmark_frame = data.iloc[0, :num_landmarks].values
+
+    landmark_frame = data[frame][0, :num_landmarks]
+
     x = landmark_frame[0::3]
     y = landmark_frame[1::3]
     z = landmark_frame[2::3]
-    
+
     # Plot the landmarks
     ax1.scatter(x, y, z, c='white', marker='o')
     ax1.set_xlabel('X', color='white')
     ax1.set_ylabel('Y', color='white')
     ax1.set_zlabel('Z', color='white')
-    ax1.set_title('Static Landmarks', color='white')
+    ax1.set_title(f'Static Landmarks - Frame {frame} - Label {label[frame]}', color='white')
     ax1.tick_params(colors='white')
     
     # Draw lines between the landmarks
@@ -181,7 +162,7 @@ def plot_static(data):
         ax1.plot([x[start], x[end]], [y[start], y[end]], [z[start], z[end]], 'white')
     
     # Plot the distances
-    distance_frame = data.iloc[0, num_landmarks:num_landmarks + 12].values
+    distance_frame = data[frame][0, num_landmarks:num_landmarks + 12]
     ax2.plot(distance_frame, 'wo-')
     ax2.set_xlabel('Distance Index', color='white')
     ax2.set_ylabel('Distance', color='white')
@@ -189,40 +170,65 @@ def plot_static(data):
     ax2.tick_params(colors='white')
     
     # Plot the angles
-    angle_frame = data.iloc[0, num_landmarks + 12:num_landmarks + 25].values
+    angle_frame = data[frame][0, num_landmarks+12:num_landmarks + 25]
     ax3.plot(angle_frame, 'wo-')
     ax3.set_xlabel('Angle Index', color='white')
     ax3.set_ylabel('Angle (degrees)', color='white')
     ax3.set_title('Static Angles', color='white')
     ax3.tick_params(colors='white')
-    
-    # Extract and plot the positions
-    position_frame = data.iloc[0, num_landmarks + 25:num_landmarks + 28].values
-    ax1.scatter(position_frame[0], position_frame[1], position_frame[2], c='red', marker='x', s=100)
 
-# Create the figure and subplots
-fig = plt.figure(figsize=(20, 5))
-ax1 = fig.add_subplot(131, projection='3d')
-ax2 = fig.add_subplot(132)
-ax3 = fig.add_subplot(133)
+def main():
+    args = get_args()
 
-# Set figure background color to black
-fig.patch.set_facecolor('black')
+    if args.dynamic:
+        data_dir = 'data/dynamic'
+    else:
+        data_dir = 'data/static'
 
-# Plot dynamic data if available
-if dynamic_data:
-    combined_data = pd.concat([data for label, data in dynamic_data], ignore_index=True)
-    combined_data = combined_data.stack().reset_index(drop=True).to_frame().T
-    print(f"Combined data shape: {combined_data.shape}")
-    combined_data = combined_data.dropna(axis=1)
-    num_frames = combined_data.shape[1] // feature_list_length
+    X, y = read_h5_files(data_dir)
 
-    ani = FuncAnimation(fig, update_dynamic, frames=num_frames, fargs=(combined_data,), interval=100)
+    global connections, num_landmarks
 
-else:
-    # Plot static data if no dynamic data is available
-    for label, data in static_data:
-        print(data.shape)
-        # plot_static(data)
+    # Define connections between landmarks
+    connections = [
+        (0, 1), (1, 2), (2, 3), (3, 4),  # Thumb
+        (0, 5), (5, 6), (6, 7), (7, 8),  # Index finger
+        (0, 9), (9, 10), (10, 11), (11, 12),  # Middle finger
+        (0, 13), (13, 14), (14, 15), (15, 16),  # Ring finger
+        (0, 17), (17, 18), (18, 19), (19, 20)  # Pinky
+    ]
 
-# plt.show()
+    # Number of landmarks (21 points with x, y, z coordinates)
+    num_landmarks = 21 * 3
+
+    if args.dynamic:
+        global buffer_size, feature_list_length, thumb_positions, index_positions, middle_positions, ring_positions, pinky_positions
+
+        buffer_size = 10  # Number of frames to keep in the buffer
+        feature_list_length = 88  # Number of features in each frame
+
+        thumb_positions = []
+        index_positions = []
+        middle_positions = []
+        ring_positions = []
+        pinky_positions = []
+
+    global fig, ax1, ax2, ax3
+    # Create the figure and subplots
+    fig = plt.figure(figsize=(39, 5))
+    ax1 = fig.add_subplot(131, projection='3d')
+    ax2 = fig.add_subplot(132)
+    ax3 = fig.add_subplot(133)
+
+    # Set figure background color to black
+    fig.patch.set_facecolor('black')
+
+    if args.dynamic:
+        ani = FuncAnimation(fig, update_dynamic, frames=len(X), fargs=(X, y,), repeat=False, interval=250)
+    else:
+        ani = FuncAnimation(fig, update_static, frames=len(X), fargs=(X, y,), repeat=False, interval=250)
+
+    plt.show()
+
+if __name__ == '__main__':
+    main()
