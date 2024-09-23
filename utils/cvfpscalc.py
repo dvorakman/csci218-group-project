@@ -1,6 +1,6 @@
 from collections import deque
 import cv2 as cv
-
+from utils.cvfpscalc import CvFpsCalc
 
 class CvFpsCalc(object):
     def __init__(self, buffer_len=1):

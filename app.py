@@ -26,13 +26,13 @@ import time
 
 # # Load the pre-trained models
 # with tf.device('/GPU:0' if gpus else '/CPU:0'):
-cnn_model = tf.keras.models.load_model('hand_landmarks_cnn_model.keras')
-rnn_model = tf.keras.models.load_model('relativitymatters_rnn_model.keras')
+cnn_model = tf.keras.models.load_model('models/static_cnn.keras')
+rnn_model = tf.keras.models.load_model('models/dynamic_rnn.keras')
 
 # Define the hand gesture labels
 # static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']]
 static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
-dynamic_labels = ['J', 'Z']
+dynamic_labels = ['[clear]', '[sumbit]', 'J', 'Z']
 all_labels = static_labels + dynamic_labels
 
 def get_args():
