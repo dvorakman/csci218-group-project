@@ -14,6 +14,7 @@ import re
 # Create a queue for logging tasks
 log_queue = queue.Queue()
 
+
 def logging_worker():
     while True:
         feature_list, label, dynamic = log_queue.get()
@@ -29,9 +30,11 @@ def logging_worker():
         save_hdf5(feature_list, label, dynamic)
         log_queue.task_done()
 
+
 # Start the logging thread
 log_thread = threading.Thread(target=logging_worker)
 log_thread.start()
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -40,9 +43,12 @@ def get_args():
     parser.add_argument("--height", type=int, default=900)
     parser.add_argument("--label", type=str, required=True, help='Label for the data')
     parser.add_argument("--dynamic", action='store_true', help='Dynamic gesture detection')
+    parser.add_argument("--folder_path", type=str, required=True, help="Path to the folder containing images.",
+                        default="data/static/asl_dataset")
     args = parser.parse_args()
     args.label = args.label.capitalize()
     return args
+
 
 def save_hdf5(sequence, label, dynamic):
     folder = 'dynamic' if dynamic else 'static'
@@ -59,8 +65,10 @@ def save_hdf5(sequence, label, dynamic):
         dset_name = f"{label}_{next_index}"
         f.create_dataset(dset_name, data=np.array(sequence))
 
+
 def calculate_distance(point1, point2):
     return math.sqrt((point1.x - point2.x) ** 2 + (point1.y - point2.y) ** 2 + (point1.z - point2.z) ** 2)
+
 
 def calculate_angle(point1, point2, point3):
     a = np.array([point1.x, point1.y, point1.z])
@@ -72,8 +80,10 @@ def calculate_angle(point1, point2, point3):
     angle = np.arccos(cosine_angle)
     return np.degrees(angle)
 
+
 def moving_average(data, window_size):
     return np.mean(list(data)[-window_size:], axis=0)
+
 
 def main():
     args = get_args()
@@ -113,16 +123,17 @@ def main():
     listener.start()
 
     with mp_hands.Hands(
-        static_image_mode=False,
-        max_num_hands=1,
-        model_complexity=1,
-        min_detection_confidence=0.75,
-        min_tracking_confidence=0.75) as hands:
-        
+            static_image_mode=False,
+            max_num_hands=1,
+            model_complexity=1,
+            min_detection_confidence=0.75,
+            min_tracking_confidence=0.75) as hands:
+
         while cap.isOpened():
             key = cv2.waitKey(5)
             if key != -1 and key != 27:
-                print(f"don't press any keys while the camera window is focused, other than to quit of course - this causes stuttering")
+                print(
+                    f"don't press any keys while the camera window is focused, other than to quit of course - this causes stuttering")
                 break
             elif key == 27:
                 break
@@ -136,13 +147,14 @@ def main():
             results = hands.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
 
             if results.multi_hand_landmarks and results.multi_hand_world_landmarks:
-                for hand_landmarks, hand_world_landmarks in zip(results.multi_hand_landmarks, results.multi_hand_world_landmarks):
+                for hand_landmarks, hand_world_landmarks in zip(results.multi_hand_landmarks,
+                                                                results.multi_hand_world_landmarks):
                     feature_list = []
                     landmarks = []
                     for landmark in hand_landmarks.landmark:
                         landmarks.extend([landmark.x, landmark.y, landmark.z])
                     landmark_buffer.append(landmarks)
-                    
+
                     # Calculate distances between key points
                     distances = [
                         calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[4]),
@@ -162,19 +174,32 @@ def main():
 
                     # Calculate angles between joints
                     angles = [
-                        calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2], hand_landmarks.landmark[3]),
-                        calculate_angle(hand_landmarks.landmark[2], hand_landmarks.landmark[3], hand_landmarks.landmark[4]),
-                        calculate_angle(hand_landmarks.landmark[5], hand_landmarks.landmark[6], hand_landmarks.landmark[7]),
-                        calculate_angle(hand_landmarks.landmark[6], hand_landmarks.landmark[7], hand_landmarks.landmark[8]),
-                        calculate_angle(hand_landmarks.landmark[9], hand_landmarks.landmark[10], hand_landmarks.landmark[11]),
-                        calculate_angle(hand_landmarks.landmark[10], hand_landmarks.landmark[11], hand_landmarks.landmark[12]),
-                        calculate_angle(hand_landmarks.landmark[13], hand_landmarks.landmark[14], hand_landmarks.landmark[15]),
-                        calculate_angle(hand_landmarks.landmark[14], hand_landmarks.landmark[15], hand_landmarks.landmark[16]),
-                        calculate_angle(hand_landmarks.landmark[17], hand_landmarks.landmark[18], hand_landmarks.landmark[19]),
-                        calculate_angle(hand_landmarks.landmark[18], hand_landmarks.landmark[19], hand_landmarks.landmark[20]),
-                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[5], hand_landmarks.landmark[9]),
-                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[9], hand_landmarks.landmark[13]),
-                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13], hand_landmarks.landmark[17])
+                        calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2],
+                                        hand_landmarks.landmark[3]),
+                        calculate_angle(hand_landmarks.landmark[2], hand_landmarks.landmark[3],
+                                        hand_landmarks.landmark[4]),
+                        calculate_angle(hand_landmarks.landmark[5], hand_landmarks.landmark[6],
+                                        hand_landmarks.landmark[7]),
+                        calculate_angle(hand_landmarks.landmark[6], hand_landmarks.landmark[7],
+                                        hand_landmarks.landmark[8]),
+                        calculate_angle(hand_landmarks.landmark[9], hand_landmarks.landmark[10],
+                                        hand_landmarks.landmark[11]),
+                        calculate_angle(hand_landmarks.landmark[10], hand_landmarks.landmark[11],
+                                        hand_landmarks.landmark[12]),
+                        calculate_angle(hand_landmarks.landmark[13], hand_landmarks.landmark[14],
+                                        hand_landmarks.landmark[15]),
+                        calculate_angle(hand_landmarks.landmark[14], hand_landmarks.landmark[15],
+                                        hand_landmarks.landmark[16]),
+                        calculate_angle(hand_landmarks.landmark[17], hand_landmarks.landmark[18],
+                                        hand_landmarks.landmark[19]),
+                        calculate_angle(hand_landmarks.landmark[18], hand_landmarks.landmark[19],
+                                        hand_landmarks.landmark[20]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[5],
+                                        hand_landmarks.landmark[9]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[9],
+                                        hand_landmarks.landmark[13]),
+                        calculate_angle(hand_landmarks.landmark[0], hand_landmarks.landmark[13],
+                                        hand_landmarks.landmark[17])
                     ]
                     angle_buffer.append(angles)
 
@@ -183,11 +208,11 @@ def main():
                         smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
                         smoothed_distances = moving_average(distance_buffer, buffer_size)
                         smoothed_angles = moving_average(angle_buffer, buffer_size)
-                        
+
                         feature_list.extend(smoothed_landmarks)
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
-                        
+
                         if collecting_data:
                             if args.dynamic:
                                 sequence_buffer.append(feature_list)
@@ -205,6 +230,7 @@ def main():
     cap.release()
     log_queue.put((None, None, None))
     log_thread.join()
+
 
 if __name__ == "__main__":
     main()
