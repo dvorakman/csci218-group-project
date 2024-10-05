@@ -31,9 +31,13 @@ rnn_model = tf.keras.models.load_model('models/dynamic_rnn.keras')
 
 # Define the hand gesture labels
 # static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']]
-static_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
-dynamic_labels = ['J', 'Z']
+static_labels = ['A', 'B', 'C','Clear', 'D','Delete', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y']
+dynamic_labels = ['Clear','J', 'Z']
 all_labels = static_labels + dynamic_labels
+
+# Constants
+STABILITY_THRESHOLD = 15  # Number of consecutive frames to confirm gesture
+COOLDOWN_PERIOD = 5.0
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -123,8 +127,26 @@ def draw_hand_landmarks(image, hand_landmarks):
         mp_drawing_styles.get_default_hand_connections_style())
     return image
 
+def pop_last_letter(buffer):
+    """Remove the last letter from the buffer."""
+    if buffer:
+        buffer.pop()
+
+def clear_buffer(buffer):
+    """Clear the entire buffer."""
+    buffer.clear()
+
+def add_space(buffer):
+    """Add a space to the buffer."""
+    buffer.append(' ')
+
 def main():
     args = get_args()
+
+    # Initialize Buffers for Sentence Construction
+    sentence_buffer = []  # List to store the sentence
+    last_appended_gesture = None  # To track the last appended gesture
+    last_append_time = 0  # Initialize last append time
 
     cap = cv2.VideoCapture(args.device)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
@@ -139,8 +161,11 @@ def main():
     angle_buffer = deque(maxlen=buffer_size)
 
     # Buffer to store sequences for dynamic gesture detection
-    sequence_length = 10 # Sliding window size
+    sequence_length = 10  # Sliding window size
     sequence_buffer = deque(maxlen=sequence_length)
+
+    # Stability buffer to confirm gesture
+    stability_buffer = deque(maxlen=STABILITY_THRESHOLD)
 
     # FPS calculation
     prev_frame_time = 0
@@ -148,14 +173,18 @@ def main():
     model_used = "None"
     confidence = 0.0
 
+    # Define unique gestures for buffer manipulation
+    pop_gesture = "Delete"  # Example gesture for popping the last letter
+    clear_gesture = "Clear"  # Example gesture for clearing the buffer
+    # space_gesture = "SPACE"  # Example gesture for adding a space
+
     with mp_hands.Hands(
         static_image_mode=False,
         max_num_hands=2,
         model_complexity=1,
         min_detection_confidence=0.75,
         min_tracking_confidence=0.75) as hands:
-        
-        # with tf.device('/GPU:0' if gpus else '/CPU:0'):
+                                                                                        
         while cap.isOpened():
             success, image = cap.read()
             if not success:
@@ -180,8 +209,8 @@ def main():
                     for landmark in hand_landmarks.landmark:
                         landmarks.extend([landmark.x, landmark.y, landmark.z])
                     landmark_buffer.append(landmarks)
-                    
-                    # Calculate distances between key points
+
+                    # Calculate distances and angles
                     distances = [
                         calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[4]),
                         calculate_distance(hand_landmarks.landmark[0], hand_landmarks.landmark[8]),
@@ -198,7 +227,6 @@ def main():
                     ]
                     distance_buffer.append(distances)
 
-                    # Calculate angles between joints
                     angles = [
                         calculate_angle(hand_landmarks.landmark[1], hand_landmarks.landmark[2], hand_landmarks.landmark[3]),
                         calculate_angle(hand_landmarks.landmark[2], hand_landmarks.landmark[3], hand_landmarks.landmark[4]),
@@ -221,7 +249,7 @@ def main():
                         smoothed_landmarks = moving_average(landmark_buffer, buffer_size)
                         smoothed_distances = moving_average(distance_buffer, buffer_size)
                         smoothed_angles = moving_average(angle_buffer, buffer_size)
-                        
+
                         feature_list.extend(smoothed_landmarks)
                         feature_list.extend(smoothed_distances)
                         feature_list.extend(smoothed_angles)
@@ -237,32 +265,52 @@ def main():
                             rnn_prediction = rnn_model.predict(rnn_input, verbose=0)
 
                             # Decision mechanism
-                            CNN_THRESHOLD = 0.60  # Increased to be more selective
-                            RNN_THRESHOLD = 0.99 # Slightly increased for dynamic gestures
+                            CNN_THRESHOLD = 0.60
+                            RNN_THRESHOLD = 0.99
 
                             cnn_confidence = np.max(cnn_prediction)
                             rnn_confidence = np.max(rnn_prediction)
-                            # rnn_confidence = 0
+
                             if rnn_confidence > RNN_THRESHOLD:
-                                # Only trust RNN if it's extremely confident
                                 current_gesture = dynamic_labels[np.argmax(rnn_prediction)]
                                 model_used = "RNN"
                                 confidence = rnn_confidence
                             elif cnn_confidence > CNN_THRESHOLD:
-                                # If CNN is very confident, trust it for static gestures
                                 current_gesture = static_labels[np.argmax(cnn_prediction)]
                                 model_used = "CNN"
-                                confidence = rnn_confidence
+                                confidence = cnn_confidence
                             else:
-                                # neither model is very confident, compare their confidence
                                 if rnn_confidence > cnn_confidence * 0.95:
                                     current_gesture = dynamic_labels[np.argmax(rnn_prediction)]
                                     model_used = "RNN"
                                     confidence = rnn_confidence
-                                else:  # Give slight advantage to CNN
+                                else:
                                     current_gesture = static_labels[np.argmax(cnn_prediction)]
                                     model_used = "CNN"
                                     confidence = cnn_confidence
+
+                            # Update stability buffer
+                            stability_buffer.append(current_gesture)
+
+                            # Check stability and cooldown
+                            if (stability_buffer.count(current_gesture) == STABILITY_THRESHOLD and
+                                (current_gesture != last_appended_gesture or (current_frame_time - last_append_time >= COOLDOWN_PERIOD))):
+                                # Handle special gestures
+                                if current_gesture == pop_gesture:
+                                    pop_last_letter(sentence_buffer)
+                                    print("Performed pop operation on sentence buffer.")
+                                elif current_gesture == clear_gesture:
+                                    clear_buffer(sentence_buffer)
+                                    print("Cleared the sentence buffer.")
+                                # elif current_gesture == space_gesture:
+                                #     add_space(sentence_buffer)
+                                #     print("Added a space to the sentence buffer.")
+                                else:
+                                    # Regular gesture: append to sentence_buffer
+                                    sentence_buffer.append(current_gesture)
+                                    print(f"Appended '{current_gesture}' to sentence buffer.")
+                                last_appended_gesture = current_gesture
+                                last_append_time = current_frame_time
 
                             print(f"""
                                     RNN: {dynamic_labels[np.argmax(rnn_prediction)]} (conf: {rnn_confidence:.4f})
@@ -272,6 +320,17 @@ def main():
 
             # Draw info on the image
             image = draw_info(image, fps, current_gesture, model_used, confidence)
+            # Display the sentence buffer
+            cv2.putText(
+                image,
+                f"Sentence: {''.join(sentence_buffer)}",
+                (10, 190),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
 
             cv2.imshow('Hand Gesture Recognition', image)
             if cv2.waitKey(5) & 0xFF == 27:

@@ -75,6 +75,19 @@ def calculate_angle(point1, point2, point3):
 def moving_average(data, window_size):
     return np.mean(list(data)[-window_size:], axis=0)
 
+def pop_last_letter(buffer):
+    """Remove the last letter from the buffer."""
+    if buffer:
+        buffer.pop()
+
+def clear_buffer(buffer):
+    """Clear the entire buffer."""
+    buffer.clear()
+
+def add_space(buffer):
+    """Add a space to the buffer."""
+    buffer.append(' ')
+
 def main():
     args = get_args()
 
