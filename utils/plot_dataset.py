@@ -9,29 +9,28 @@ import argparse
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dynamic", action='store_true', help='Dynamic gesture dataset')
+    parser.add_argument("--label", type=str, help='Filter by gesture label')
     args = parser.parse_args()
+    args.label = args.label.upper() if args.label else None
     return args
 
-def read_h5_files(directory):
+def read_h5_files(directory, label=None):
     X = []
     y = []
     for file in os.listdir(directory):
         if file.endswith(".h5"):
+            if label and file.split(".")[0] != label:
+                continue
             filepath = os.path.join(directory, file)
             with h5py.File(filepath, "r") as f:
-                # List all datasets in the file
-                # print(f"Datasets in {file}: {list(f.keys())}")
-                
                 for dataset_name in f.keys():
                     # Read the dataset (each sequence has variable length)
                     data = f[dataset_name][:]
-                    label = file.split(".")[0]  # Extract label from filename
+                    file_label = file.split(".")[0]  # Extract label from filename
                     
                     # Append data and label
                     X.append(data)
-                    y.append(label)
-    
-    # Return X as a list and y as a NumPy array
+                    y.append(file_label)
     return X, np.array(y)
 
 def update_dynamic(frame, data, label):
@@ -185,7 +184,7 @@ def main():
     else:
         data_dir = 'data/static'
 
-    X, y = read_h5_files(data_dir)
+    X, y = read_h5_files(data_dir, args.label)
 
     global connections, num_landmarks
 
