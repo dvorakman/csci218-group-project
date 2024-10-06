@@ -223,9 +223,9 @@ def main():
     fig.patch.set_facecolor('black')
 
     if args.dynamic:
-        ani = FuncAnimation(fig, update_dynamic, frames=len(X), fargs=(X, y,), repeat=False, interval=250)
+        ani = FuncAnimation(fig, update_dynamic, frames=len(X), fargs=(X, y,), repeat=True, interval=250)
     else:
-        ani = FuncAnimation(fig, update_static, frames=len(X), fargs=(X, y,), repeat=False, interval=250)
+        ani = FuncAnimation(fig, update_static, frames=len(X), fargs=(X, y,), repeat=True, interval=250)
 
     plt.show()
 
