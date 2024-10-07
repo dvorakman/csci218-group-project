@@ -9,7 +9,7 @@ import os
 import threading
 import queue
 from warnings import filterwarnings
-from pynput import keyboard
+# from pynput import keyboard
 import re
 
 # Create a queue for logging tasks
